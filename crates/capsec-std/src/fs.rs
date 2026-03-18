@@ -21,7 +21,8 @@ use std::path::Path;
 
 /// Reads the entire contents of a file into a byte vector.
 /// Requires [`FsRead`] permission.
-pub fn read(path: impl AsRef<Path>, _cap: &impl Has<FsRead>) -> Result<Vec<u8>, CapSecError> {
+pub fn read(path: impl AsRef<Path>, cap: &impl Has<FsRead>) -> Result<Vec<u8>, CapSecError> {
+    let _ = cap.cap_ref();
     Ok(std::fs::read(path)?)
 }
 
@@ -29,8 +30,9 @@ pub fn read(path: impl AsRef<Path>, _cap: &impl Has<FsRead>) -> Result<Vec<u8>, 
 /// Requires [`FsRead`] permission.
 pub fn read_to_string(
     path: impl AsRef<Path>,
-    _cap: &impl Has<FsRead>,
+    cap: &impl Has<FsRead>,
 ) -> Result<String, CapSecError> {
+    let _ = cap.cap_ref();
     Ok(std::fs::read_to_string(path)?)
 }
 
@@ -38,8 +40,9 @@ pub fn read_to_string(
 /// Requires [`FsRead`] permission.
 pub fn read_dir(
     path: impl AsRef<Path>,
-    _cap: &impl Has<FsRead>,
+    cap: &impl Has<FsRead>,
 ) -> Result<std::fs::ReadDir, CapSecError> {
+    let _ = cap.cap_ref();
     Ok(std::fs::read_dir(path)?)
 }
 
@@ -47,8 +50,9 @@ pub fn read_dir(
 /// Requires [`FsRead`] permission.
 pub fn metadata(
     path: impl AsRef<Path>,
-    _cap: &impl Has<FsRead>,
+    cap: &impl Has<FsRead>,
 ) -> Result<std::fs::Metadata, CapSecError> {
+    let _ = cap.cap_ref();
     Ok(std::fs::metadata(path)?)
 }
 
@@ -57,26 +61,30 @@ pub fn metadata(
 pub fn write(
     path: impl AsRef<Path>,
     contents: impl AsRef<[u8]>,
-    _cap: &impl Has<FsWrite>,
+    cap: &impl Has<FsWrite>,
 ) -> Result<(), CapSecError> {
+    let _ = cap.cap_ref();
     Ok(std::fs::write(path, contents)?)
 }
 
 /// Creates all directories in the given path if they don't exist.
 /// Requires [`FsWrite`] permission.
-pub fn create_dir_all(path: impl AsRef<Path>, _cap: &impl Has<FsWrite>) -> Result<(), CapSecError> {
+pub fn create_dir_all(path: impl AsRef<Path>, cap: &impl Has<FsWrite>) -> Result<(), CapSecError> {
+    let _ = cap.cap_ref();
     Ok(std::fs::create_dir_all(path)?)
 }
 
 /// Deletes a file.
 /// Requires [`FsWrite`] permission.
-pub fn remove_file(path: impl AsRef<Path>, _cap: &impl Has<FsWrite>) -> Result<(), CapSecError> {
+pub fn remove_file(path: impl AsRef<Path>, cap: &impl Has<FsWrite>) -> Result<(), CapSecError> {
+    let _ = cap.cap_ref();
     Ok(std::fs::remove_file(path)?)
 }
 
 /// Recursively deletes a directory and all its contents.
 /// Requires [`FsWrite`] permission.
-pub fn remove_dir_all(path: impl AsRef<Path>, _cap: &impl Has<FsWrite>) -> Result<(), CapSecError> {
+pub fn remove_dir_all(path: impl AsRef<Path>, cap: &impl Has<FsWrite>) -> Result<(), CapSecError> {
+    let _ = cap.cap_ref();
     Ok(std::fs::remove_dir_all(path)?)
 }
 
@@ -85,8 +93,9 @@ pub fn remove_dir_all(path: impl AsRef<Path>, _cap: &impl Has<FsWrite>) -> Resul
 pub fn rename(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
-    _cap: &impl Has<FsWrite>,
+    cap: &impl Has<FsWrite>,
 ) -> Result<(), CapSecError> {
+    let _ = cap.cap_ref();
     Ok(std::fs::rename(from, to)?)
 }
 
@@ -95,15 +104,18 @@ pub fn rename(
 pub fn copy(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
-    _read_cap: &impl Has<FsRead>,
-    _write_cap: &impl Has<FsWrite>,
+    read_cap: &impl Has<FsRead>,
+    write_cap: &impl Has<FsWrite>,
 ) -> Result<u64, CapSecError> {
+    let _ = read_cap.cap_ref();
+    let _ = write_cap.cap_ref();
     Ok(std::fs::copy(from, to)?)
 }
 
 /// Opens a file for reading. Returns a `std::fs::File`.
 /// Requires [`FsRead`] permission.
-pub fn open(path: impl AsRef<Path>, _cap: &impl Has<FsRead>) -> Result<std::fs::File, CapSecError> {
+pub fn open(path: impl AsRef<Path>, cap: &impl Has<FsRead>) -> Result<std::fs::File, CapSecError> {
+    let _ = cap.cap_ref();
     Ok(std::fs::File::open(path)?)
 }
 
@@ -111,7 +123,8 @@ pub fn open(path: impl AsRef<Path>, _cap: &impl Has<FsRead>) -> Result<std::fs::
 /// Requires [`FsWrite`] permission.
 pub fn create(
     path: impl AsRef<Path>,
-    _cap: &impl Has<FsWrite>,
+    cap: &impl Has<FsWrite>,
 ) -> Result<std::fs::File, CapSecError> {
+    let _ = cap.cap_ref();
     Ok(std::fs::File::create(path)?)
 }

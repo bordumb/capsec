@@ -7,13 +7,15 @@ use capsec_core::permission::{EnvRead, EnvWrite};
 
 /// Reads an environment variable.
 /// Requires [`EnvRead`] permission.
-pub fn var(key: &str, _cap: &impl Has<EnvRead>) -> Result<String, std::env::VarError> {
+pub fn var(key: &str, cap: &impl Has<EnvRead>) -> Result<String, std::env::VarError> {
+    let _ = cap.cap_ref();
     std::env::var(key)
 }
 
 /// Returns an iterator of all environment variables.
 /// Requires [`EnvRead`] permission.
-pub fn vars(_cap: &impl Has<EnvRead>) -> std::env::Vars {
+pub fn vars(cap: &impl Has<EnvRead>) -> std::env::Vars {
+    let _ = cap.cap_ref();
     std::env::vars()
 }
 
@@ -35,8 +37,9 @@ pub fn vars(_cap: &impl Has<EnvRead>) -> std::env::Vars {
 pub fn set_var(
     key: impl AsRef<std::ffi::OsStr>,
     value: impl AsRef<std::ffi::OsStr>,
-    _cap: &impl Has<EnvWrite>,
+    cap: &impl Has<EnvWrite>,
 ) {
+    let _ = cap.cap_ref();
     unsafe {
         std::env::set_var(key, value);
     }
