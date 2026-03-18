@@ -26,7 +26,7 @@ import urllib.request
 from pathlib import Path
 
 CARGO_TOML = Path(__file__).resolve().parents[2] / "Cargo.toml"
-CRATES_IO_URL = "https://crates.io/api/v1/crates/cargo-capsec"
+CRATES_IO_URL = "https://crates.io/api/v1/crates/capsec"
 
 
 def get_workspace_version() -> str:
@@ -109,14 +109,14 @@ def main() -> None:
     print(f"Workspace version: {version}")
     print(f"Git tag:           {tag}")
 
-    # Check crates.io for version bump
+    # Check crates.io for version bump (advisory, not blocking — partial publishes are recoverable)
     published = get_crates_io_version()
     if published:
         print(f"crates.io version: {published}")
         if published == version:
-            print(f"\nERROR: Version {version} is already published on crates.io.", file=sys.stderr)
-            print("Bump the version in Cargo.toml before releasing.", file=sys.stderr)
-            sys.exit(1)
+            print(f"\nWARNING: capsec {version} is already on crates.io.", file=sys.stderr)
+            print("If this is a re-tag after a partial publish, that's fine.", file=sys.stderr)
+            print("If this is a new release, bump the version in Cargo.toml first.\n", file=sys.stderr)
     else:
         print("crates.io version: (not found or not published yet)")
 
@@ -153,7 +153,7 @@ def main() -> None:
 
     print(f"Pushing tag {tag} to origin (pre-push hooks may run)...", flush=True)
     result = subprocess.run(
-        ["git", "push", "--no-verify", "origin", tag],
+        ["git", "push", "origin", tag],
         cwd=CARGO_TOML.parent,
     )
     if result.returncode != 0:
