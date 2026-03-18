@@ -40,7 +40,12 @@ fn run_audit(args: AuditArgs) {
     };
 
     // Discover crates
-    let crates = match discovery::discover_crates(&workspace_root, args.include_deps, &spawn_cap, &fs_read) {
+    let crates = match discovery::discover_crates(
+        &workspace_root,
+        args.include_deps,
+        &spawn_cap,
+        &fs_read,
+    ) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Error: {e}");
