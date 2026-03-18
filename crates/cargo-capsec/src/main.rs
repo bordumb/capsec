@@ -33,7 +33,7 @@ fn run_audit(args: AuditArgs) {
     };
 
     // Discover crates
-    let crates = match discovery::discover_crates(&workspace_root) {
+    let crates = match discovery::discover_crates(&workspace_root, args.include_deps) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Error: {e}");
@@ -96,21 +96,30 @@ fn run_audit(args: AuditArgs) {
     // Apply allow rules
     all_findings.retain(|f| !config::should_allow(f, &cfg));
 
+    // Load baseline once if needed for diff or fail-on
+    let baseline_data = if args.diff || args.fail_on.is_some() {
+        baseline::load_baseline(&workspace_root)
+    } else {
+        None
+    };
+
     // Diff against baseline
     if args.diff {
-        if let Some(bl) = baseline::load_baseline(&workspace_root) {
-            let diff_result = baseline::diff(&all_findings, &bl);
+        if let Some(ref bl) = baseline_data {
+            let diff_result = baseline::diff(&all_findings, bl);
             baseline::print_diff(&diff_result);
         } else {
             eprintln!("No baseline found. Run with --baseline first.");
         }
     }
 
-    // Report
-    match args.format.as_str() {
-        "json" => println!("{}", reporter::report_json(&all_findings)),
-        "sarif" => println!("{}", reporter::report_sarif(&all_findings)),
-        _ => reporter::report_text(&all_findings),
+    // Report (suppress with --quiet)
+    if !args.quiet {
+        match args.format.as_str() {
+            "json" => println!("{}", reporter::report_json(&all_findings)),
+            "sarif" => println!("{}", reporter::report_sarif(&all_findings)),
+            _ => reporter::report_text(&all_findings),
+        }
     }
 
     // Save baseline
@@ -126,9 +135,8 @@ fn run_audit(args: AuditArgs) {
         let threshold = Risk::from_str(fail_level);
 
         if args.diff {
-            // When diffing, only fail on NEW findings above threshold
-            if let Some(bl) = baseline::load_baseline(&workspace_root) {
-                let diff_result = baseline::diff(&all_findings, &bl);
+            if let Some(ref bl) = baseline_data {
+                let diff_result = baseline::diff(&all_findings, bl);
                 let new_set: std::collections::HashSet<_> =
                     diff_result.new_findings.into_iter().collect();
                 let has_new_high = all_findings.iter().any(|f| {

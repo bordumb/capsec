@@ -56,8 +56,12 @@ impl Detector {
                 .map(|call| expand_call(&call.segments, &import_map))
                 .collect();
 
-            // Pass 1: collect path-based findings and build a set of matched paths
-            // (needed for MethodWithContext co-occurrence checks in pass 2)
+            // Pass 1: collect path-based findings and build a set of matched patterns.
+            // We store the *pattern* (e.g. ["Command", "new"]), not the expanded call path.
+            // This is correct: if someone writes `use std::process::Command; Command::new("sh")`,
+            // import expansion produces `std::process::Command::new`, which suffix-matches
+            // the pattern ["Command", "new"]. Pass 2 then checks for pattern co-occurrence,
+            // so `.output()` fires only when the Command::new *pattern* was matched in pass 1.
             let mut matched_paths: HashSet<Vec<String>> = HashSet::new();
 
             for (call, expanded) in func.calls.iter().zip(expanded_calls.iter()) {
@@ -354,6 +358,22 @@ mod tests {
                 "Duplicate finding at {}:{}", f.call_line, f.call_col
             );
         }
+    }
+
+    #[test]
+    fn detect_aliased_import() {
+        let source = r#"
+            use std::fs::read as load;
+            fn fetch() {
+                let _ = load("data.bin");
+            }
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        let detector = Detector::new();
+        let findings = detector.analyse(&parsed, "test-crate", "0.1.0");
+        assert!(!findings.is_empty(), "Should detect aliased import: use std::fs::read as load");
+        assert_eq!(findings[0].category, Category::Fs);
+        assert!(findings[0].call_text.contains("std::fs::read"));
     }
 
     #[test]

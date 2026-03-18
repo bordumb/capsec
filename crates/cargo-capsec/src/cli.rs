@@ -75,4 +75,8 @@ pub struct AuditArgs {
     /// Skip these crates (comma-separated)
     #[arg(long)]
     pub skip: Option<String>,
+
+    /// Suppress output (exit code only, for CI)
+    #[arg(short, long)]
+    pub quiet: bool,
 }

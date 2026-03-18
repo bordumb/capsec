@@ -23,11 +23,16 @@ struct Package {
     source: Option<String>,
 }
 
-pub fn discover_crates(workspace_root: &Path) -> Result<Vec<CrateInfo>, String> {
-    // Don't use --no-deps: we need path dependencies to appear.
-    // We distinguish local vs registry crates by source == None (local) vs Some (registry).
+pub fn discover_crates(workspace_root: &Path, include_deps: bool) -> Result<Vec<CrateInfo>, String> {
+    // Use --no-deps by default for speed (avoids resolving 300+ transitive deps).
+    // Drop it when --include-deps is set so path dependencies and registry crates appear.
+    let mut args = vec!["metadata", "--format-version=1"];
+    if !include_deps {
+        args.push("--no-deps");
+    }
+
     let output = Command::new("cargo")
-        .args(["metadata", "--format-version=1"])
+        .args(&args)
         .current_dir(workspace_root)
         .output()
         .map_err(|e| format!("Failed to run cargo metadata: {e}"))?;
