@@ -125,6 +125,63 @@ fn main() {
 
 Every capability traces back to `root.grant()`. If a dependency tries to read files without being given a `Cap<FsRead>`, the code doesn't compile.
 
+### What the compiler actually says
+
+**Wrong capability type** — passing a `Cap<NetConnect>` where `Cap<FsRead>` is required:
+
+```rust
+let net_cap = root.grant::<NetConnect>();
+let _ = capsec::fs::read_to_string("/etc/passwd", &net_cap);
+```
+
+```
+error[E0277]: the trait bound `Cap<NetConnect>: Has<FsRead>` is not satisfied
+ --> src/main.rs:4:55
+  |
+4 |     let _ = capsec::fs::read_to_string("/etc/passwd", &net_cap);
+  |             --------------------------                ^^^^^^^^ the trait `Has<FsRead>` is not implemented for `Cap<NetConnect>`
+  |             |
+  |             required by a bound introduced by this call
+```
+
+**Missing capability** — calling a capsec function without providing a token at all:
+
+```rust
+let _ = capsec::fs::read_to_string("/etc/passwd");
+```
+
+```
+error[E0061]: this function takes 2 arguments but 1 argument was supplied
+ --> src/main.rs:2:13
+  |
+2 |     let _ = capsec::fs::read_to_string("/etc/passwd");
+  |             ^^^^^^^^^^^^^^^^^^^^^^^^^^--------------- argument #2 of type `&_` is missing
+  |
+help: provide the argument
+  |
+2 |     let _ = capsec::fs::read_to_string("/etc/passwd", /* cap */);
+  |                                                     +++++++++++
+```
+
+**Cross-category violation** — `FsAll` subsumes `FsRead` and `FsWrite`, but not `NetConnect`:
+
+```rust
+let fs_all = root.grant::<FsAll>();
+needs_net(&fs_all);  // fn needs_net(_: &impl Has<NetConnect>) {}
+```
+
+```
+error[E0277]: the trait bound `Cap<FsAll>: Has<NetConnect>` is not satisfied
+ --> src/main.rs:3:15
+  |
+3 |     needs_net(&fs_all);
+  |     --------- ^^^^^^^ the trait `Has<NetConnect>` is not implemented for `Cap<FsAll>`
+  |     |
+  |     required by a bound introduced by this call
+```
+
+These are real `rustc` errors — no custom error framework, no runtime panics. The Rust compiler does the enforcement.
+
 ### What this gives you
 
 | | Before | After |
