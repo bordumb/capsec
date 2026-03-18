@@ -14,6 +14,7 @@
 //! let data = capsec_std::fs::read("/tmp/data.bin", &cap).unwrap();
 //! ```
 
+use crate::file::{ReadFile, WriteFile};
 use capsec_core::cap::Cap;
 use capsec_core::error::CapSecError;
 use capsec_core::has::Has;
@@ -113,19 +114,18 @@ pub fn copy(
     Ok(std::fs::copy(from, to)?)
 }
 
-/// Opens a file for reading. Returns a `std::fs::File`.
+/// Opens a file for reading. Returns a [`ReadFile`] that implements `Read` + `Seek`
+/// but NOT `Write`, enforcing the capability boundary beyond the function call.
 /// Requires [`FsRead`] permission.
-pub fn open(path: impl AsRef<Path>, cap: &impl Has<FsRead>) -> Result<std::fs::File, CapSecError> {
+pub fn open(path: impl AsRef<Path>, cap: &impl Has<FsRead>) -> Result<ReadFile, CapSecError> {
     let _proof: Cap<FsRead> = cap.cap_ref();
-    Ok(std::fs::File::open(path)?)
+    Ok(ReadFile::new(std::fs::File::open(path)?))
 }
 
-/// Creates or truncates a file for writing. Returns a `std::fs::File`.
+/// Creates or truncates a file for writing. Returns a [`WriteFile`] that implements
+/// `Write` + `Seek` but NOT `Read`, enforcing the capability boundary beyond the function call.
 /// Requires [`FsWrite`] permission.
-pub fn create(
-    path: impl AsRef<Path>,
-    cap: &impl Has<FsWrite>,
-) -> Result<std::fs::File, CapSecError> {
+pub fn create(path: impl AsRef<Path>, cap: &impl Has<FsWrite>) -> Result<WriteFile, CapSecError> {
     let _proof: Cap<FsWrite> = cap.cap_ref();
-    Ok(std::fs::File::create(path)?)
+    Ok(WriteFile::new(std::fs::File::create(path)?))
 }

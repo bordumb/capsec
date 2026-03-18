@@ -1,0 +1,5 @@
+error[E0599]: no method named `write_all` found for struct `ReadFile` in the current scope
+ --> tests/compile_fail/open_cannot_write.rs:8:10
+  |
+8 |     file.write_all(b"nope").unwrap();
+  |          ^^^^^^^^^ method not found in `ReadFile`

@@ -110,6 +110,8 @@ macro_rules! impl_ambient {
     }
 }
 
+// If you add a permission here, also add it to the
+// `ambient_covers_all_permissions` test at the bottom of this file.
 impl_ambient!(
     FsRead, FsWrite, FsAll, NetConnect, NetBind, NetAll, EnvRead, EnvWrite, Spawn
 );
@@ -255,5 +257,28 @@ mod tests {
     fn tuple_is_zst() {
         use std::mem::size_of;
         assert_eq!(size_of::<Cap<(FsRead, NetConnect)>>(), 0);
+    }
+
+    /// Compile-time proof that Cap<Ambient> satisfies Has<P> for every permission.
+    /// If a new permission is added to permission.rs but not to impl_ambient!,
+    /// this test fails to compile.
+    #[test]
+    fn ambient_covers_all_permissions() {
+        fn assert_ambient_has<P: Permission>()
+        where
+            Cap<Ambient>: Has<P>,
+        {
+        }
+
+        assert_ambient_has::<FsRead>();
+        assert_ambient_has::<FsWrite>();
+        assert_ambient_has::<FsAll>();
+        assert_ambient_has::<NetConnect>();
+        assert_ambient_has::<NetBind>();
+        assert_ambient_has::<NetAll>();
+        assert_ambient_has::<EnvRead>();
+        assert_ambient_has::<EnvWrite>();
+        assert_ambient_has::<Spawn>();
+        // Ambient itself is covered by the direct impl<P> Has<P> for Cap<P>
     }
 }

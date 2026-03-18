@@ -60,6 +60,7 @@ pub use capsec_macro::{context, deny, main, requires};
 
 /// Capability-gated filesystem operations. See [`capsec_std::fs`].
 pub mod fs {
+    pub use capsec_std::file::{ReadFile, WriteFile};
     pub use capsec_std::fs::*;
 }
 

@@ -1,0 +1,5 @@
+error[E0599]: no method named `read_to_end` found for struct `WriteFile` in the current scope
+ --> tests/compile_fail/create_cannot_read.rs:9:10
+  |
+9 |     file.read_to_end(&mut buf).unwrap();
+  |          ^^^^^^^^^^^ method not found in `WriteFile`

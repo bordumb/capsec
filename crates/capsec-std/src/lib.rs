@@ -11,6 +11,7 @@
 //! the capabilities it declares.
 
 pub mod env;
+pub mod file;
 pub mod fs;
 pub mod net;
 pub mod process;

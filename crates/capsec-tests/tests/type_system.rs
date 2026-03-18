@@ -409,3 +409,26 @@ fn requires_impl_still_works() {
     let cap = root.fs_read();
     fn_with_requires_impl(&cap);
 }
+
+// ============================================================================
+// K. RESTRICTED FILE HANDLES
+// ============================================================================
+
+#[test]
+fn open_returns_readable_file() {
+    let root = test_root();
+    let cap = root.fs_read();
+    let mut file = capsec_std::fs::open("/dev/null", &cap).unwrap();
+    let mut buf = Vec::new();
+    std::io::Read::read_to_end(&mut file, &mut buf).unwrap();
+}
+
+#[test]
+fn create_returns_writable_file() {
+    let root = test_root();
+    let cap = root.fs_write();
+    let path = std::env::temp_dir().join("capsec-test-create");
+    let mut file = capsec_std::fs::create(&path, &cap).unwrap();
+    std::io::Write::write_all(&mut file, b"test").unwrap();
+    std::fs::remove_file(&path).ok();
+}
