@@ -23,7 +23,7 @@ fn main() {
 fn run_audit(args: AuditArgs) {
     // Grant capabilities — this is the single point of ambient authority.
     // Every I/O operation below traces back to these grants.
-    let cap_root = capsec_core::root::test_root();
+    let cap_root = capsec_core::root::root();
     let fs_read = cap_root.grant::<capsec_core::permission::FsRead>();
     let fs_write = cap_root.grant::<capsec_core::permission::FsWrite>();
     let spawn_cap = cap_root.grant::<capsec_core::permission::Spawn>();
