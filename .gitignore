@@ -7,3 +7,6 @@ concat_output.txt
 .flow
 docs/plans/
 .DS_Store
+
+# Example output artifacts
+synced.json
