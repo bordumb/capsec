@@ -1,10 +1,10 @@
-# capsec-cli
+# cargo-capsec
 
 Static capability audit for Rust — find out what your code can do to the outside world.
 
 ## What it does
 
-`capsec-cli` scans Rust source code and reports every function that exercises ambient authority: filesystem access, network connections, environment variable reads, process spawning. Point it at a workspace and it tells you what's happening — no annotations or code changes required.
+`cargo-capsec` scans Rust source code and reports every function that exercises ambient authority: filesystem access, network connections, environment variable reads, process spawning. Point it at a workspace and it tells you what's happening — no annotations or code changes required.
 
 ## Installation
 
@@ -84,7 +84,7 @@ reason = "Logging framework, reviewed"
 ## Limitations
 
 - **Use aliases**: `use std::fs::read as r; r(...)` — the import is flagged, but the bare aliased call may not be detected in all cases.
-- **Method call matching is heuristic**: `.connect()` is flagged regardless of receiver type. May produce false positives.
+- **Method call matching is contextual**: `.output()`, `.spawn()`, `.status()` only flag when `Command::new` is in the same function. `.send_to()` requires `UdpSocket::bind`. Other method names not matched.
 - **Proc macro generated code** is not visible to the analysis.
 - **No data flow analysis**: Dead code will be flagged.
 - **FFI**: `extern` blocks are detected but individual libc calls aren't categorized.
