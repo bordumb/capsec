@@ -3,7 +3,7 @@
 [![CI](https://github.com/bordumb/capsec/actions/workflows/ci.yml/badge.svg)](https://github.com/bordumb/capsec/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/capsec.svg)](https://crates.io/crates/capsec)
 [![docs.rs](https://docs.rs/capsec/badge.svg)](https://docs.rs/capsec)
-[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/capsec.svg)](LICENSE)
+[![License: Apache-2.0](https://img.shields.io/crates/l/capsec.svg)](LICENSE)
 
 Capability-based security tooling for Rust.
 
@@ -105,30 +105,33 @@ Functions declare their I/O requirements in the type signature. The compiler enf
 ```rust
 use capsec::prelude::*;
 
-// This function CANNOT do I/O — it has no capability token.
-// Adding std::fs::read() here would require a Cap<FsRead> parameter,
-// which the compiler would demand.
-pub fn process_csv(input: &[u8]) -> Vec<Vec<String>> {
-    parse(input)
+// Define a context with exactly the permissions your app needs.
+// The macro generates Cap fields, constructor, and Has<P> impls.
+#[capsec::context]
+struct AppCtx {
+    fs: FsRead,
+    net: NetConnect,
 }
 
-// This function declares it needs filesystem read access.
-// The caller must provide proof via a Cap<FsRead> token.
+// Leaf functions take &impl Has<P> — works with raw caps AND context structs.
 pub fn load_config(path: &str, cap: &impl Has<FsRead>) -> Result<String, CapSecError> {
     capsec::fs::read_to_string(path, cap)
 }
 
-// In main — the single point of authority:
-fn main() {
-    let root = capsec::root();
-    let fs_cap = root.grant::<FsRead>();
+// Intermediate functions take a single context reference — not N separate caps.
+pub fn app_logic(ctx: &AppCtx) -> Result<String, CapSecError> {
+    load_config("/etc/app/config.toml", ctx)  // ctx satisfies Has<FsRead>
+}
 
-    let config = load_config("/etc/app/config.toml", &fs_cap).unwrap();
-    let result = process_csv(input); // no cap needed — pure computation
+// #[capsec::main] injects the capability root automatically.
+#[capsec::main]
+fn main(root: CapRoot) {
+    let ctx = AppCtx::new(&root);
+    let config = app_logic(&ctx).unwrap();
 }
 ```
 
-Every capability traces back to `root.grant()`. If a function uses capsec wrappers (like `capsec::fs::read_to_string`) without being given a `Cap<FsRead>`, the code doesn't compile. The audit tool catches code that bypasses capsec wrappers entirely — calling `std::fs` directly, using FFI, or hiding I/O behind re-exports.
+Every capability traces back to `CapRoot`. If a function uses capsec wrappers (like `capsec::fs::read_to_string`) without being given a `Cap<FsRead>`, the code doesn't compile. The audit tool catches code that bypasses capsec wrappers entirely — calling `std::fs` directly, using FFI, or hiding I/O behind re-exports.
 
 ### What the compiler actually says
 
@@ -200,6 +203,8 @@ These are real `rustc` errors — no custom error framework, no runtime panics. 
 
 capsec protects against **cooperative safe Rust** — code that uses capsec wrappers cannot exceed its declared permissions, and the compiler enforces this at zero runtime cost.
 
+The `Has<P>` trait is open for implementation — custom context structs can implement it to delegate capability access. Security is maintained because `Cap::new()` is `pub(crate)`: no external code can forge a `Cap<P>` in safe Rust. The `Permission` trait remains sealed — external crates cannot invent new permission types.
+
 What capsec **does not** protect against:
 
 - **`unsafe` code** that forges capability tokens via `transmute`, `MaybeUninit`, or pointer tricks. The type system is sound only within safe Rust. (The adversarial test suite in `capsec-tests/tests/type_system.rs` documents these attacks and confirms they require `unsafe`.)
@@ -226,4 +231,4 @@ For the full catalog of known evasion vectors and how each tool handles them, se
 
 ## License
 
-MIT OR Apache-2.0
+Apache-2.0

@@ -1,0 +1,19 @@
+error: #[capsec::main] expected first parameter of type CapRoot
+ --> tests/compile_fail/main_no_params.rs:5:1
+  |
+5 | fn main() {}
+  | ^^^^^^^^^
+
+warning: unused import: `capsec::prelude::*`
+ --> tests/compile_fail/main_no_params.rs:2:5
+  |
+2 | use capsec::prelude::*;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/compile_fail/main_no_params.rs:5:13
+  |
+5 | fn main() {}
+  |             ^ consider adding a `main` function to `$DIR/tests/compile_fail/main_no_params.rs`

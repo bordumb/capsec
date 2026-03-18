@@ -30,23 +30,12 @@ fn send_metrics(addr: &str, data: &str, cap: &impl Has<NetConnect>) -> Result<()
 // ─── Not yet migrated ───────────────────────────────────────────────
 
 /// This function still uses `std::fs` directly — it works fine, but
-/// `cargo capsec audit` will flag it:
-///
-/// ```text
-///   FS  examples/incremental_migration.rs:41:5  std::fs::write  save_cache()
-/// ```
-///
-/// When you're ready, convert it to take `cap: &impl Has<FsWrite>` and
-/// call `capsec::fs::write()` instead.
+/// `cargo capsec audit` will flag it.
 fn save_cache(path: &str, data: &str) {
     std::fs::write(path, data).expect("cache write failed");
 }
 
-/// Also not yet migrated. `cargo capsec audit` flags:
-///
-/// ```text
-///   ENV  examples/incremental_migration.rs:52:5  std::env::var  get_log_level()
-/// ```
+/// Also not yet migrated. `cargo capsec audit` flags env var access.
 fn get_log_level() -> String {
     std::env::var("LOG_LEVEL").unwrap_or_else(|_| "info".into())
 }
@@ -58,18 +47,16 @@ fn format_report(config: &str, level: &str) -> String {
     format!("[{level}] config loaded: {}", config.len())
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let root = capsec::root();
-
-    // Grant capabilities for migrated functions.
-    let fs_read = root.grant::<FsRead>();
-    let net_cap = root.grant::<NetConnect>();
+#[capsec::main]
+fn main(root: CapRoot) -> Result<(), Box<dyn std::error::Error>> {
+    // Convenience methods for migrated functions
+    let fs_read = root.fs_read();
+    let net_cap = root.net_connect();
 
     // Migrated: capabilities enforced at compile time.
     let config = load_config("/etc/app/config.toml", &fs_read)?;
 
     // Not yet migrated: still uses ambient authority.
-    // `cargo capsec audit` will flag these until they're converted.
     let level = get_log_level();
     save_cache("/tmp/app.cache", &config);
 

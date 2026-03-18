@@ -1,0 +1,14 @@
+error: #[capsec::requires] on a function with concrete parameter types requires `on = <param>` to identify the capability parameter.
+       Example: #[capsec::requires(fs::read, on = ctx)]
+ --> tests/compile_fail/requires_concrete_no_on.rs:7:1
+  |
+7 | fn process(ctx: &AppCtx) {}
+  | ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `capsec::prelude::*`
+ --> tests/compile_fail/requires_concrete_no_on.rs:2:5
+  |
+2 | use capsec::prelude::*;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

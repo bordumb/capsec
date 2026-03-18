@@ -4,7 +4,7 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
-description = "Procedural macros for capsec: #[requires] and #[deny] capability annotations"
+description = "Procedural macros for capsec: #[requires], #[deny], #[main], and #[context]"
 keywords = ["security", "capability", "proc-macro"]
 categories = ["development-tools::procedural-macro-helpers"]
 

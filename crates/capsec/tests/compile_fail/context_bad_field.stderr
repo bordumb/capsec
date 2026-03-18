@@ -1,0 +1,13 @@
+error: field 'x' has type 'String', which is not a capsec permission type. Expected one of: FsRead, FsWrite, FsAll, NetConnect, NetBind, NetAll, EnvRead, EnvWrite, Spawn, Ambient
+ --> tests/compile_fail/context_bad_field.rs:6:8
+  |
+6 |     x: String,
+  |        ^^^^^^
+
+warning: unused import: `capsec::prelude::*`
+ --> tests/compile_fail/context_bad_field.rs:2:5
+  |
+2 | use capsec::prelude::*;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

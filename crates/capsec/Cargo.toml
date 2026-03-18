@@ -19,3 +19,4 @@ capsec-std.workspace = true
 [dev-dependencies]
 trybuild.workspace = true
 capsec-core = { workspace = true, features = ["test-support"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

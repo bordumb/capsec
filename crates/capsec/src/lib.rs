@@ -25,7 +25,7 @@
 //! This is a facade crate that re-exports from three internal crates:
 //!
 //! - **`capsec-core`** — capability tokens, permission traits, composition
-//! - **`capsec-macro`** — `#[requires]` and `#[deny]` proc macros
+//! - **`capsec-macro`** — `#[requires]`, `#[deny]`, `#[main]`, and `#[context]` proc macros
 //! - **`capsec-std`** — capability-gated `std` wrappers
 
 //  Re-exports from capsec-core
@@ -44,9 +44,17 @@ pub use capsec_core::root::test_root;
 
 pub use capsec_core::attenuate::{Attenuated, DirScope, HostScope, Scope};
 
+/// Creates a `CapRoot` and passes it to the given closure.
+///
+/// This is a convenience entry point. Panics if `root()` has already been called.
+pub fn run<T>(f: impl FnOnce(CapRoot) -> T) -> T {
+    let root = root();
+    f(root)
+}
+
 //  Re-exports from capsec-macro
 
-pub use capsec_macro::{deny, requires};
+pub use capsec_macro::{context, deny, main, requires};
 
 //  Capability-gated std wrappers
 

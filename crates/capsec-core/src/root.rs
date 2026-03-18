@@ -17,7 +17,7 @@
 //! conflicts across parallel test threads.
 
 use crate::cap::Cap;
-use crate::permission::Permission;
+use crate::permission::*;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 static ROOT_CREATED: AtomicBool = AtomicBool::new(false);
@@ -93,12 +93,62 @@ impl CapRoot {
     pub fn grant<P: Permission>(&self) -> Cap<P> {
         Cap::new()
     }
+
+    /// Grants a `Cap<FsRead>` for filesystem read access.
+    pub fn fs_read(&self) -> Cap<FsRead> {
+        self.grant()
+    }
+
+    /// Grants a `Cap<FsWrite>` for filesystem write access.
+    pub fn fs_write(&self) -> Cap<FsWrite> {
+        self.grant()
+    }
+
+    /// Grants a `Cap<FsAll>` for full filesystem access.
+    pub fn fs_all(&self) -> Cap<FsAll> {
+        self.grant()
+    }
+
+    /// Grants a `Cap<NetConnect>` for outbound network connections.
+    pub fn net_connect(&self) -> Cap<NetConnect> {
+        self.grant()
+    }
+
+    /// Grants a `Cap<NetBind>` for binding network listeners.
+    pub fn net_bind(&self) -> Cap<NetBind> {
+        self.grant()
+    }
+
+    /// Grants a `Cap<NetAll>` for full network access.
+    pub fn net_all(&self) -> Cap<NetAll> {
+        self.grant()
+    }
+
+    /// Grants a `Cap<EnvRead>` for reading environment variables.
+    pub fn env_read(&self) -> Cap<EnvRead> {
+        self.grant()
+    }
+
+    /// Grants a `Cap<EnvWrite>` for writing environment variables.
+    pub fn env_write(&self) -> Cap<EnvWrite> {
+        self.grant()
+    }
+
+    /// Grants a `Cap<Spawn>` for subprocess execution.
+    pub fn spawn(&self) -> Cap<Spawn> {
+        self.grant()
+    }
+
+    /// Grants a `Cap<Ambient>` with full ambient authority.
+    pub fn ambient(&self) -> Cap<Ambient> {
+        self.grant()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::permission::FsRead;
+    use crate::has::Has;
 
     #[test]
     fn test_root_works() {
@@ -118,5 +168,40 @@ mod tests {
         let root = test_root();
         let cap = root.grant::<FsRead>();
         assert_eq!(std::mem::size_of_val(&cap), 0);
+    }
+
+    #[test]
+    fn convenience_methods_return_correct_types() {
+        let root = test_root();
+        fn check_fs_read(_: &impl Has<FsRead>) {}
+        fn check_fs_write(_: &impl Has<FsWrite>) {}
+        fn check_fs_all(_: &impl Has<FsAll>) {}
+        fn check_net_connect(_: &impl Has<NetConnect>) {}
+        fn check_net_bind(_: &impl Has<NetBind>) {}
+        fn check_net_all(_: &impl Has<NetAll>) {}
+        fn check_env_read(_: &impl Has<EnvRead>) {}
+        fn check_env_write(_: &impl Has<EnvWrite>) {}
+        fn check_spawn(_: &impl Has<Spawn>) {}
+        fn check_ambient(_: &impl Has<Ambient>) {}
+
+        check_fs_read(&root.fs_read());
+        check_fs_write(&root.fs_write());
+        check_fs_all(&root.fs_all());
+        check_net_connect(&root.net_connect());
+        check_net_bind(&root.net_bind());
+        check_net_all(&root.net_all());
+        check_env_read(&root.env_read());
+        check_env_write(&root.env_write());
+        check_spawn(&root.spawn());
+        check_ambient(&root.ambient());
+    }
+
+    #[test]
+    fn convenience_equivalent_to_grant() {
+        let root = test_root();
+        // Both produce ZSTs of the same type
+        let _a: Cap<FsRead> = root.fs_read();
+        let _b: Cap<FsRead> = root.grant();
+        assert_eq!(std::mem::size_of_val(&_a), std::mem::size_of_val(&_b));
     }
 }

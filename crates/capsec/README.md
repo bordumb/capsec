@@ -15,22 +15,21 @@ cargo add capsec
 ```rust,ignore
 use capsec::prelude::*;
 
-fn main() {
-    let root = capsec::root();
-    let fs_cap = root.grant::<FsRead>();
-
-    let data = load_data("/tmp/data.csv", &fs_cap).unwrap();
-    let result = transform(&data);
+#[capsec::context]
+struct AppCtx {
+    fs: FsRead,
+    net: NetConnect,
 }
 
-// Requires filesystem read — enforced by the compiler
+#[capsec::main]
+fn main(root: CapRoot) {
+    let ctx = AppCtx::new(&root);
+    let data = load_data("/tmp/data.csv", &ctx).unwrap();
+}
+
+// Leaf functions take &impl Has<P> — works with raw caps AND context structs
 fn load_data(path: &str, cap: &impl Has<FsRead>) -> Result<String, CapSecError> {
     capsec::fs::read_to_string(path, cap)
-}
-
-// No capability token — this function cannot do I/O
-fn transform(input: &str) -> String {
-    input.to_uppercase()
 }
 ```
 
@@ -38,9 +37,13 @@ fn transform(input: &str) -> String {
 
 | From | What you get |
 |------|-------------|
-| `capsec-core` | `Cap`, `Has`, `Permission`, `CapRoot`, `FsRead`, `NetConnect`, etc. |
-| `capsec-macro` | `#[capsec::requires(...)]`, `#[capsec::deny(...)]` |
+| `capsec-core` | `Cap`, `SendCap`, `Has`, `Permission`, `CapRoot`, `FsRead`, `NetConnect`, etc. |
+| `capsec-macro` | `#[capsec::requires]`, `#[capsec::deny]`, `#[capsec::main]`, `#[capsec::context]` |
 | `capsec-std` | `capsec::fs`, `capsec::net`, `capsec::env`, `capsec::process` |
+
+Also provides:
+- `capsec::run(|root| { ... })` — convenience entry point
+- `capsec::prelude::*` — common imports
 
 ## Testing
 
@@ -53,4 +56,4 @@ capsec = { version = "0.1", features = ["test-support"] }
 
 ## License
 
-MIT OR Apache-2.0
+Apache-2.0

@@ -1,0 +1,19 @@
+error: first parameter must be CapRoot
+ --> tests/compile_fail/main_wrong_type.rs:5:12
+  |
+5 | fn main(x: String) {}
+  |            ^^^^^^
+
+warning: unused import: `capsec::prelude::*`
+ --> tests/compile_fail/main_wrong_type.rs:2:5
+  |
+2 | use capsec::prelude::*;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0601]: `main` function not found in crate `$CRATE`
+ --> tests/compile_fail/main_wrong_type.rs:5:22
+  |
+5 | fn main(x: String) {}
+  |                      ^ consider adding a `main` function to `$DIR/tests/compile_fail/main_wrong_type.rs`

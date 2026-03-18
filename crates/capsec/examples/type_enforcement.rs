@@ -5,8 +5,8 @@
 //! that functions can only do what their signature declares.
 //!
 //! Key concepts shown here:
-//! - `capsec::root()` — the single point of authority in main()
-//! - `root.grant::<P>()` — create a capability token for permission P
+//! - `#[capsec::main]` — injects the capability root automatically
+//! - Convenience methods (`root.fs_read()`) — discoverable via IDE autocomplete
 //! - `&impl Has<P>` — function bounds that declare required permissions
 //! - `capsec::fs::*`, `capsec::net::*`, `capsec::process::*` — drop-in
 //!   replacements for std that require a capability argument
@@ -48,21 +48,17 @@ fn run_cleanup(dir: &str, cap: &impl Has<Spawn>) -> Result<(), CapSecError> {
 }
 
 /// Pure computation — no capability parameter, no I/O possible.
-/// The compiler guarantees this function cannot touch the filesystem,
-/// network, or environment.
 fn process_data(input: &str) -> String {
     input.to_uppercase()
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // root() is the single point of authority. It can only be called once.
-    let root = capsec::root();
-
-    // Grant exactly the capabilities each function needs.
-    let fs_read = root.grant::<FsRead>();
-    let fs_write = root.grant::<FsWrite>();
-    let net_cap = root.grant::<NetConnect>();
-    let spawn_cap = root.grant::<Spawn>();
+#[capsec::main]
+fn main(root: CapRoot) -> Result<(), Box<dyn std::error::Error>> {
+    // Convenience methods — no turbofish needed
+    let fs_read = root.fs_read();
+    let fs_write = root.fs_write();
+    let net_cap = root.net_connect();
+    let spawn_cap = root.spawn();
 
     // Each function receives only the capability it needs.
     let config = load_config("/etc/app/config.toml", &fs_read)?;
@@ -70,13 +66,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     save_result("/tmp/result.txt", &result, &fs_write)?;
     send_report("telemetry.example.com:8080", &result, &net_cap)?;
     run_cleanup("/tmp/scratch", &spawn_cap)?;
-
-    // What you gain:
-    // - load_config() can read files but NOT write, connect, or spawn.
-    // - save_result() can write files but NOT read, connect, or spawn.
-    // - send_report() can connect but NOT touch files or spawn processes.
-    // - process_data() can do NOTHING — it's provably pure.
-    // - All of this is checked at compile time, with zero runtime cost.
 
     Ok(())
 }

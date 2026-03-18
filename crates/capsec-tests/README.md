@@ -40,16 +40,19 @@ docs/
     findings.md         # Full adversarial review with severity ratings
 ```
 
-### type_system.rs (20 tests)
+### type_system.rs (23 tests)
 
-- **Has\<P\> forgery** — safe-code capability forgery via `panic!()` divergence (the critical finding)
-- **capsec-std end-to-end exploits** — forged caps actually work with `fs::read`, `env::var`
+- **Context delegation** — user-defined structs implementing `Has<P>` via `Cap<P>` fields
+- **SendCap satisfies Has** — `SendCap<P>` implements `Has<P>` directly
+- **Context macro** — `#[capsec::context]` structs satisfy `Has<P>`, work with capsec-std
+- **Send context** — `#[capsec::context(send)]` produces `Send + Sync` structs
+- **Requires validation** — `#[capsec::requires(perm, on = param)]` compiles with valid context
 - **unsafe forgery** — `transmute`, `MaybeUninit`, `ptr::read` (expected, documented)
 - **SendCap cross-thread** — roundtrip through `make_send()` / `as_cap()`, no escalation
 - **Attenuated move semantics** — `.attenuate()` consumes the original cap
 - **Negative controls** — clone, subsumption, cross-category all correctly blocked
 
-### audit_evasion.rs (28 tests)
+### audit_evasion.rs (29 tests)
 
 Confirmed evasions: function pointers, `include!()`, inline assembly, module re-exports, dependency re-exports, libc/nix calls.
 
@@ -57,7 +60,7 @@ Fixed evasions: glob imports (`use std::fs::*; read(...)` now detected).
 
 Detection positive controls: `std::fs`, `File::open`, `TcpStream::connect`, `Command::new`, `env::var`, `extern` blocks, tokio, reqwest, aliased imports, closures, cfg-gated code.
 
-### scope_escapes.rs (11 tests)
+### scope_escapes.rs (13 tests)
 
 DirScope: `../` traversal, absolute escape, non-existent paths — all blocked.
 HostScope: prefix collision (`api.example.com.evil.com`) — confirmed bug.

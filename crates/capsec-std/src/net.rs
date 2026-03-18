@@ -2,6 +2,7 @@
 //!
 //! Drop-in replacements for `std::net` functions that require a capability token.
 
+use capsec_core::cap::Cap;
 use capsec_core::error::CapSecError;
 use capsec_core::has::Has;
 use capsec_core::permission::{NetBind, NetConnect};
@@ -13,7 +14,7 @@ pub fn tcp_connect(
     addr: impl ToSocketAddrs,
     cap: &impl Has<NetConnect>,
 ) -> Result<TcpStream, CapSecError> {
-    let _ = cap.cap_ref();
+    let _proof: Cap<NetConnect> = cap.cap_ref();
     Ok(TcpStream::connect(addr)?)
 }
 
@@ -23,7 +24,7 @@ pub fn tcp_bind(
     addr: impl ToSocketAddrs,
     cap: &impl Has<NetBind>,
 ) -> Result<TcpListener, CapSecError> {
-    let _ = cap.cap_ref();
+    let _proof: Cap<NetBind> = cap.cap_ref();
     Ok(TcpListener::bind(addr)?)
 }
 
@@ -33,6 +34,6 @@ pub fn udp_bind(
     addr: impl ToSocketAddrs,
     cap: &impl Has<NetBind>,
 ) -> Result<UdpSocket, CapSecError> {
-    let _ = cap.cap_ref();
+    let _proof: Cap<NetBind> = cap.cap_ref();
     Ok(UdpSocket::bind(addr)?)
 }

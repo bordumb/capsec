@@ -1,0 +1,13 @@
+error: #[capsec::context] requires a struct with named fields
+ --> tests/compile_fail/context_tuple_struct.rs:5:1
+  |
+5 | struct Bad(FsRead);
+  | ^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `capsec::prelude::*`
+ --> tests/compile_fail/context_tuple_struct.rs:2:5
+  |
+2 | use capsec::prelude::*;
+  |     ^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default

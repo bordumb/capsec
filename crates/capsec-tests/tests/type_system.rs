@@ -2,14 +2,13 @@
 //!
 //! Each test attempts to forge, escalate, or bypass capability tokens.
 //!
-//! ## Has<P> forgery (sections A + B) — NOW BLOCKED
+//! ## Has<P> trait — open for delegation
 //!
-//! The `Has<P>` trait is now sealed. The 7 forgery tests that previously
-//! demonstrated the vulnerability have been moved to compile-fail tests in
-//! `tests/compile_fail/has_forgery_*.rs`. They now prove the fix works by
-//! failing to compile.
+//! `Has<P>` is now open so user-defined context structs can implement it.
+//! Security is maintained because `Cap::new()` is `pub(crate)` — no external
+//! code can forge a `Cap<P>` in safe Rust.
 
-use capsec_core::cap::Cap;
+use capsec_core::cap::{Cap, SendCap};
 use capsec_core::has::Has;
 use capsec_core::permission::*;
 use capsec_core::root::test_root;
@@ -273,4 +272,140 @@ fn no_cross_category_leak() {
     // (This would be a compile error if uncommented)
     // fn needs_net(_cap: &impl Has<NetConnect>) {}
     // needs_net(&fs_all); // ERROR
+}
+
+// ============================================================================
+// G. CONTEXT DELEGATION (Has<P> is open for user structs)
+// ============================================================================
+
+/// User-defined struct with a Cap<FsRead> field can implement Has<FsRead>
+/// and pass to functions requiring that capability.
+#[test]
+fn context_struct_satisfies_has() {
+    struct MyContext {
+        fs: Cap<FsRead>,
+    }
+
+    impl Has<FsRead> for MyContext {
+        fn cap_ref(&self) -> Cap<FsRead> {
+            self.fs.cap_ref()
+        }
+    }
+
+    let root = test_root();
+    let ctx = MyContext {
+        fs: root.grant::<FsRead>(),
+    };
+
+    fn needs_fs(_: &impl Has<FsRead>) {}
+    needs_fs(&ctx);
+}
+
+/// SendCap<P> satisfies Has<P> via the blanket impl.
+#[test]
+fn sendcap_satisfies_has() {
+    let root = test_root();
+    let send_cap: SendCap<FsRead> = root.grant::<FsRead>().make_send();
+
+    fn needs_fs(_: &impl Has<FsRead>) {}
+    needs_fs(&send_cap);
+}
+
+/// SendCap<P>.cap_ref() returns a valid Cap<P>.
+#[test]
+fn sendcap_has_delegation_runtime() {
+    let root = test_root();
+    let send_cap: SendCap<FsRead> = root.grant::<FsRead>().make_send();
+
+    let _proof: Cap<FsRead> = send_cap.cap_ref();
+}
+
+// ============================================================================
+// H. CAPSEC::RUN
+// ============================================================================
+
+#[test]
+fn capsec_run_provides_root() {
+    // Can't use capsec::run() because it calls the singleton root().
+    // Instead test the pattern directly.
+    let root = test_root();
+    let _cap = root.fs_read();
+}
+
+// ============================================================================
+// I. CONTEXT MACRO
+// ============================================================================
+
+#[capsec_macro::context]
+struct TestCtx {
+    fs: FsRead,
+    net: NetConnect,
+}
+
+#[test]
+fn context_macro_satisfies_has() {
+    let root = test_root();
+    let ctx = TestCtx::new(&root);
+
+    fn needs_fs(_: &impl Has<FsRead>) {}
+    fn needs_net(_: &impl Has<NetConnect>) {}
+    needs_fs(&ctx);
+    needs_net(&ctx);
+}
+
+#[test]
+fn context_macro_works_with_capsec_std() {
+    let root = test_root();
+    let ctx = TestCtx::new(&root);
+
+    let result = capsec_std::fs::read("/dev/null", &ctx);
+    assert!(result.is_ok());
+}
+
+#[capsec_macro::context(send)]
+struct SendCtx {
+    fs: FsRead,
+}
+
+#[test]
+fn send_context_is_send_sync() {
+    fn assert_send_sync<T: Send + Sync>() {}
+    assert_send_sync::<SendCtx>();
+}
+
+#[test]
+fn send_context_satisfies_has() {
+    let root = test_root();
+    let ctx = SendCtx::new(&root);
+
+    fn needs_fs(_: &impl Has<FsRead>) {}
+    needs_fs(&ctx);
+}
+
+// ============================================================================
+// J. REQUIRES WITH ON = PARAM
+// ============================================================================
+
+#[capsec_macro::requires(fs::read, on = ctx)]
+fn fn_with_requires_on(ctx: &TestCtx) {
+    let _: Cap<FsRead> = ctx.cap_ref();
+}
+
+#[test]
+fn requires_on_compiles_with_valid_context() {
+    let root = test_root();
+    let ctx = TestCtx::new(&root);
+    fn_with_requires_on(&ctx);
+}
+
+#[capsec_macro::requires(fs::read)]
+fn fn_with_requires_impl(cap: &impl Has<FsRead>) {
+    let _: Cap<FsRead> = cap.cap_ref();
+}
+
+#[test]
+fn requires_impl_still_works() {
+    let root = test_root();
+    let cap = root.fs_read();
+    fn_with_requires_impl(&cap);
 }

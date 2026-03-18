@@ -5,8 +5,8 @@
 ```
 capsec/
 ├── crates/
-│   ├── capsec-core/      # Zero-cost capability tokens, permission traits, sealed Has<P>
-│   ├── capsec-macro/      # #[requires] and #[deny] proc macros
+│   ├── capsec-core/       # Zero-cost capability tokens, permission traits, Has<P>
+│   ├── capsec-macro/      # #[requires], #[deny], #[main], #[context] proc macros
 │   ├── capsec-std/        # Capability-gated wrappers for std::fs, std::net, etc.
 │   ├── capsec/            # Facade crate — re-exports everything, owns examples
 │   ├── cargo-capsec/      # Static audit CLI tool
@@ -155,5 +155,23 @@ TRYBUILD=overwrite cargo test -p capsec --test compile_tests
 - **One concern per PR.** A new authority pattern, a bug fix, or a refactor — not all three.
 - **Include tests.** New authority patterns need integration tests. New type-system features need compile-fail tests.
 - **Run `cargo capsec audit`** against the repo itself before submitting — capsec dogfoods its own tool.
-- **Keep the security model intact.** `Cap<P>` must remain unforgeable, `!Send`, and sealed. Any change that weakens these guarantees needs discussion in an issue first.
+- **Keep the security model intact.** `Cap<P>` must remain unforgeable and `!Send`. `Permission` must remain sealed. `Cap::new()` must remain `pub(crate)`. Any change that weakens these guarantees needs discussion in an issue first.
 - **Update docs** if you change public API. The facade crate's `lib.rs` doc comments and crate READMEs should stay current.
+
+## Context pattern and macros
+
+capsec provides three ergonomic macros that work together:
+
+| Macro | Purpose |
+|-------|---------|
+| `#[capsec::context]` | Generates `Has<P>` impls on a struct, turning it into a capability context |
+| `#[capsec::main]` | Injects `CapRoot` creation into a function entry point |
+| `#[capsec::requires]` | Validates that a function's parameters satisfy declared permissions |
+
+When developing macros in `capsec-macro`:
+
+- All generated code uses fully qualified `capsec_core::*` paths (not `capsec::*`)
+- Permission type validation must stay in sync with `capsec-core/src/permission.rs`
+- The `resolve.rs` module maps shorthand paths (`fs::read`) to full types
+- Add compile-fail tests in `capsec/tests/compile_fail/` for error cases
+- Add runtime tests in `capsec-tests/tests/type_system.rs` for happy paths
