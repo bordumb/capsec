@@ -1,3 +1,14 @@
+//! Baseline diffing — track capability changes across runs.
+//!
+//! The baseline system enables incremental adoption in CI. On the first run,
+//! `--baseline` saves all findings to `.capsec-baseline.json`. On subsequent runs,
+//! `--diff` compares current findings against the saved baseline and reports only
+//! what's new or removed.
+//!
+//! This lets teams adopt `cargo capsec audit` on existing projects without fixing
+//! every finding upfront — `--diff --fail-on high` only fails on *new* high-risk
+//! findings introduced by a PR.
+
 use crate::detector::Finding;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -5,13 +16,24 @@ use std::path::Path;
 
 const BASELINE_FILE: &str = ".capsec-baseline.json";
 
+/// A single entry in the saved baseline file.
+///
+/// Baseline entries are compared by value equality — if a finding's crate, function,
+/// call text, and category all match, it's considered the same finding across runs.
+/// This means code movement (same call, different line) won't trigger a diff.
 #[derive(Serialize, Deserialize, Clone, Hash, Eq, PartialEq, Debug)]
 pub struct BaselineEntry {
+    /// Name of the crate containing the finding.
     pub crate_name: String,
+    /// Version of the crate.
     pub crate_version: String,
+    /// Source file path.
     pub file: String,
+    /// Function name containing the call.
     pub function: String,
+    /// The expanded call path (e.g., `"std::fs::read"`).
     pub call_text: String,
+    /// Category label (e.g., `"FS"`, `"NET"`).
     pub category: String,
 }
 
@@ -28,18 +50,26 @@ impl From<&Finding> for BaselineEntry {
     }
 }
 
+/// The result of comparing current findings against a saved baseline.
 pub struct DiffResult {
+    /// Findings that exist now but weren't in the baseline (newly introduced).
     pub new_findings: Vec<BaselineEntry>,
+    /// Findings that were in the baseline but no longer exist (resolved or removed).
     pub removed_findings: Vec<BaselineEntry>,
+    /// Number of findings present in both current and baseline.
     pub unchanged_count: usize,
 }
 
+/// Loads a previously saved baseline from `.capsec-baseline.json` in the workspace root.
+///
+/// Returns `None` if the file doesn't exist or can't be parsed.
 pub fn load_baseline(workspace_root: &Path) -> Option<HashSet<BaselineEntry>> {
     let path = workspace_root.join(BASELINE_FILE);
     let data = std::fs::read_to_string(path).ok()?;
     serde_json::from_str(&data).ok()
 }
 
+/// Saves current findings as the new baseline to `.capsec-baseline.json`.
 pub fn save_baseline(workspace_root: &Path, findings: &[Finding]) -> Result<(), String> {
     let entries: Vec<BaselineEntry> = findings.iter().map(BaselineEntry::from).collect();
     let json = serde_json::to_string_pretty(&entries)
@@ -48,6 +78,9 @@ pub fn save_baseline(workspace_root: &Path, findings: &[Finding]) -> Result<(), 
         .map_err(|e| format!("Failed to write baseline: {e}"))
 }
 
+/// Computes the difference between current findings and a saved baseline.
+///
+/// Returns which findings are new, which were removed, and how many are unchanged.
 pub fn diff(current: &[Finding], baseline: &HashSet<BaselineEntry>) -> DiffResult {
     let current_set: HashSet<BaselineEntry> = current.iter().map(BaselineEntry::from).collect();
 
@@ -62,6 +95,7 @@ pub fn diff(current: &[Finding], baseline: &HashSet<BaselineEntry>) -> DiffResul
     }
 }
 
+/// Prints a human-readable diff summary to stderr.
 pub fn print_diff(diff_result: &DiffResult) {
     if !diff_result.new_findings.is_empty() {
         eprintln!(

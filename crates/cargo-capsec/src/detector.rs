@@ -1,31 +1,97 @@
+//! The detection engine — matches parsed call sites against the authority registry.
+//!
+//! This is the core of `cargo-capsec`. It takes a [`ParsedFile`] from the parser,
+//! expands call paths using import information, and matches them against the
+//! [`authority registry`](crate::authorities::build_registry). The output is a
+//! list of [`Finding`]s, each representing one instance of ambient authority usage.
+//!
+//! # Two-pass matching
+//!
+//! The detector uses a two-pass approach per function:
+//!
+//! 1. **Pass 1**: Match all [`AuthorityPattern::Path`] patterns and record which
+//!    patterns were found (needed for contextual matching).
+//! 2. **Pass 2**: Match [`AuthorityPattern::MethodWithContext`] patterns, which only
+//!    fire if their required context path was found in pass 1.
+//!
+//! This eliminates false positives from common method names like `.status()` and `.output()`.
+
 use crate::authorities::{Authority, AuthorityPattern, Category, CustomAuthority, Risk, build_registry};
 use crate::parser::{CallKind, ImportPath, ParsedFile};
 use serde::Serialize;
 use std::collections::HashSet;
 
+/// A single instance of ambient authority usage found in source code.
+///
+/// Each finding represents one call site where code exercises authority over the
+/// filesystem, network, environment, or process table. Findings are the primary
+/// output of the audit pipeline.
+///
+/// # Deduplication
+///
+/// The detector deduplicates findings by `(file, function, call_line, call_col)`,
+/// so each unique call site appears at most once even if multiple import paths
+/// could match it.
 #[derive(Debug, Clone, Serialize)]
 pub struct Finding {
+    /// Source file path.
     pub file: String,
+    /// Name of the function containing the call.
     pub function: String,
+    /// Line where the containing function is defined.
     pub function_line: usize,
+    /// Line of the call expression.
     pub call_line: usize,
+    /// Column of the call expression.
     pub call_col: usize,
+    /// The expanded call path (e.g., `"std::fs::read"`).
     pub call_text: String,
+    /// What kind of ambient authority this exercises.
     pub category: Category,
+    /// Finer-grained classification (e.g., `"read"`, `"connect"`, `"spawn"`).
     pub subcategory: String,
+    /// How dangerous this call is.
     pub risk: Risk,
+    /// Human-readable description.
     pub description: String,
+    /// Whether this call is inside a `build.rs` `main()` function.
     pub is_build_script: bool,
+    /// Name of the crate containing this call.
     pub crate_name: String,
+    /// Version of the crate containing this call.
     pub crate_version: String,
 }
 
+/// The ambient authority detector.
+///
+/// Holds the built-in authority registry plus any user-defined custom authorities
+/// from `.capsec.toml`. Create one with [`Detector::new`], optionally extend it
+/// with [`add_custom_authorities`](Detector::add_custom_authorities), then call
+/// [`analyse`](Detector::analyse) on each parsed file.
+///
+/// # Example
+///
+/// ```
+/// use cargo_capsec::parser::parse_source;
+/// use cargo_capsec::detector::Detector;
+///
+/// let source = r#"
+///     use std::fs;
+///     fn load() { let _ = fs::read("data.bin"); }
+/// "#;
+///
+/// let parsed = parse_source(source, "example.rs").unwrap();
+/// let detector = Detector::new();
+/// let findings = detector.analyse(&parsed, "my-crate", "0.1.0");
+/// assert_eq!(findings.len(), 1);
+/// ```
 pub struct Detector {
     authorities: Vec<Authority>,
     custom_paths: Vec<(Vec<String>, Category, Risk, String)>,
 }
 
 impl Detector {
+    /// Creates a new detector with the built-in authority registry.
     pub fn new() -> Self {
         Self {
             authorities: build_registry(),
@@ -33,6 +99,7 @@ impl Detector {
         }
     }
 
+    /// Extends the detector with custom authority patterns from `.capsec.toml`.
     pub fn add_custom_authorities(&mut self, customs: &[CustomAuthority]) {
         for c in customs {
             self.custom_paths.push((
@@ -44,6 +111,10 @@ impl Detector {
         }
     }
 
+    /// Analyses a parsed file and returns all ambient authority findings.
+    ///
+    /// Expands call paths using the file's `use` imports, matches against the
+    /// authority registry (built-in + custom), and deduplicates by call site.
     pub fn analyse(&self, file: &ParsedFile, crate_name: &str, crate_version: &str) -> Vec<Finding> {
         let mut findings = Vec::new();
         let import_map = build_import_map(&file.use_imports);

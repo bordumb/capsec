@@ -1,12 +1,28 @@
+//! Workspace and source file discovery.
+//!
+//! Uses `cargo metadata` to enumerate all crates in a workspace, then recursively
+//! walks each crate's `src/` directory to find `.rs` source files. Also detects
+//! `build.rs` files at the crate root.
+//!
+//! By default, only workspace-local crates are returned (`--no-deps` mode for speed).
+//! With `include_deps = true`, all packages from `cargo metadata` are returned,
+//! including registry dependencies whose source is cached in `~/.cargo/registry/src/`.
+
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// Metadata about a crate discovered in the workspace.
 #[derive(Debug, Clone)]
 pub struct CrateInfo {
+    /// Crate name (e.g., `"serde"`, `"my-app"`).
     pub name: String,
+    /// Crate version (e.g., `"1.0.228"`).
     pub version: String,
+    /// Path to the crate's `src/` directory.
     pub source_dir: PathBuf,
+    /// `true` if this is a registry dependency (has a `source` field in cargo metadata),
+    /// `false` if it's a local workspace member or path dependency.
     pub is_dependency: bool,
 }
 
@@ -23,6 +39,11 @@ struct Package {
     source: Option<String>,
 }
 
+/// Discovers all crates in a Cargo workspace by running `cargo metadata`.
+///
+/// When `include_deps` is `false` (default), passes `--no-deps` for speed — only
+/// workspace members and path dependencies appear. When `true`, all transitive
+/// dependencies with cached source are included.
 pub fn discover_crates(workspace_root: &Path, include_deps: bool) -> Result<Vec<CrateInfo>, String> {
     // Use --no-deps by default for speed (avoids resolving 300+ transitive deps).
     // Drop it when --include-deps is set so path dependencies and registry crates appear.
@@ -68,6 +89,10 @@ pub fn discover_crates(workspace_root: &Path, include_deps: bool) -> Result<Vec<
     Ok(crates)
 }
 
+/// Recursively discovers all `.rs` source files in a directory.
+///
+/// Skips `target/` and hidden directories. Also checks for `build.rs` at the
+/// crate root (the parent of the `src/` directory).
 pub fn discover_source_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     discover_recursive(dir, &mut files);

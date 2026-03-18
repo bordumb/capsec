@@ -1,55 +1,122 @@
+//! Rust source file parser built on [`syn`].
+//!
+//! Parses `.rs` files into a structured representation that captures the information
+//! the [`Detector`](crate::detector::Detector) needs: function boundaries, call sites,
+//! `use` imports, and `extern` blocks. Handles free functions, `impl` block methods,
+//! and trait default methods.
+//!
+//! The parser uses [`syn::visit::Visit`] to walk the AST. It does **not** perform type
+//! resolution — all matching is done on syntactic path segments. Import aliases are
+//! tracked so the [`Detector`](crate::detector::Detector) can expand them.
+
 use std::path::Path;
 use syn::visit::Visit;
 
+/// The parsed representation of a single `.rs` source file.
+///
+/// Contains every function body, `use` import, and `extern` block found in the file.
+/// This is the input to [`Detector::analyse`](crate::detector::Detector::analyse).
 #[derive(Debug, Clone)]
 pub struct ParsedFile {
+    /// File path (for reporting).
     pub path: String,
+    /// All functions found: free functions, `impl` methods, and trait default methods.
     pub functions: Vec<ParsedFunction>,
+    /// All `use` imports, with aliases tracked.
     pub use_imports: Vec<ImportPath>,
+    /// All `extern` blocks (FFI declarations).
     pub extern_blocks: Vec<ExternBlock>,
 }
 
+/// A single function (free, `impl` method, or trait default method) and its call sites.
 #[derive(Debug, Clone)]
 pub struct ParsedFunction {
+    /// The function name (e.g., `"load_config"`).
     pub name: String,
+    /// Line number where the function is defined.
     pub line: usize,
+    /// Every call expression found inside the function body.
     pub calls: Vec<CallSite>,
+    /// True if this is the `main()` function inside a `build.rs` file.
     pub is_build_script: bool,
 }
 
+/// A single call expression inside a function body.
+///
+/// Call sites are either qualified function calls (`fs::read(...)`) or method calls
+/// (`stream.connect(...)`). The [`segments`](CallSite::segments) field holds the
+/// raw path segments before import expansion.
 #[derive(Debug, Clone)]
 pub struct CallSite {
+    /// Path segments of the call (e.g., `["fs", "read"]` or `["TcpStream", "connect"]`).
     pub segments: Vec<String>,
+    /// Source line number.
     pub line: usize,
+    /// Source column number.
     pub col: usize,
+    /// Whether this is a function call or a method call.
     pub kind: CallKind,
 }
 
+/// Distinguishes qualified function calls from method calls.
 #[derive(Debug, Clone)]
 pub enum CallKind {
+    /// A qualified path call like `fs::read(...)` or `Command::new(...)`.
     FunctionCall,
-    MethodCall { method: String },
+    /// A method call like `stream.connect(...)` or `cmd.output()`.
+    MethodCall {
+        /// The method name (e.g., `"connect"`, `"output"`).
+        method: String,
+    },
 }
 
+/// A `use` import statement, with optional alias.
+///
+/// For `use std::fs::read as load`, the segments are `["std", "fs", "read"]` and
+/// the alias is `Some("load")`. The [`Detector`](crate::detector::Detector) uses
+/// this to expand bare calls: when it sees `load(...)`, it looks up the alias and
+/// expands it to `std::fs::read`.
 #[derive(Debug, Clone)]
 pub struct ImportPath {
+    /// The full path segments (e.g., `["std", "fs", "read"]`).
     pub segments: Vec<String>,
+    /// The `as` alias, if any (e.g., `Some("load")` for `use std::fs::read as load`).
     pub alias: Option<String>,
 }
 
+/// An `extern` block declaring foreign functions.
+///
+/// Any `extern` block is flagged as [`Category::Ffi`](crate::authorities::Category::Ffi)
+/// by the detector, since FFI calls bypass Rust's safety model entirely.
 #[derive(Debug, Clone)]
 pub struct ExternBlock {
+    /// The ABI string (e.g., `Some("C")` for `extern "C"`).
     pub abi: Option<String>,
+    /// Names of functions declared in the block.
     pub functions: Vec<String>,
+    /// Source line number.
     pub line: usize,
 }
 
+/// Parses a `.rs` file from disk into a [`ParsedFile`].
+///
+/// Reads the file contents and delegates to [`parse_source`]. Returns an error
+/// string if the file cannot be read or parsed.
 pub fn parse_file(path: &Path) -> Result<ParsedFile, String> {
     let source =
         std::fs::read_to_string(path).map_err(|e| format!("Failed to read {}: {e}", path.display()))?;
     parse_source(&source, &path.display().to_string())
 }
 
+/// Parses Rust source code from a string into a [`ParsedFile`].
+///
+/// This is the primary entry point for programmatic usage and testing.
+/// The `path` parameter is used only for error messages and the
+/// [`ParsedFile::path`] field — it doesn't need to be a real file.
+///
+/// # Errors
+///
+/// Returns an error string if [`syn::parse_file`] fails (e.g., invalid Rust syntax).
 pub fn parse_source(source: &str, path: &str) -> Result<ParsedFile, String> {
     let syntax = syn::parse_file(source).map_err(|e| format!("Failed to parse {path}: {e}"))?;
 

@@ -1,11 +1,22 @@
+//! Output formatters — text, JSON, and SARIF.
+//!
+//! Three output modes, each targeting a different workflow:
+//!
+//! - **Text** ([`report_text`]) — color-coded terminal output grouped by crate, for humans.
+//! - **JSON** ([`report_json`]) — structured output for scripts and CI pipelines.
+//! - **SARIF** ([`report_sarif`]) — [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
+//!   for GitHub Code Scanning and other SARIF-compatible tools.
+
 use crate::authorities::{Category, Risk};
 use crate::detector::Finding;
 use colored::Colorize;
 use serde::Serialize;
 use std::collections::BTreeMap;
 
-// ── Text reporter ────────────────────────────────────────────────
-
+/// Prints findings to stdout as color-coded text grouped by crate.
+///
+/// Includes a summary with counts by category and risk level. Prints a green
+/// "OK" message when no findings are present.
 pub fn report_text(findings: &[Finding]) {
     let by_crate = group_by_crate(findings);
 
@@ -96,42 +107,70 @@ fn group_by_crate<'a>(findings: &'a [Finding]) -> BTreeMap<String, Vec<&'a Findi
 
 // ── JSON reporter ────────────────────────────────────────────────
 
+/// Top-level JSON report structure, output by [`report_json`].
 #[derive(Serialize)]
 pub struct JsonReport {
+    /// Version of cargo-capsec that produced this report.
     pub version: String,
+    /// Findings grouped by crate.
     pub crates: Vec<JsonCrate>,
+    /// Aggregate statistics.
     pub summary: JsonSummary,
 }
 
+/// A crate and its findings in the JSON report.
 #[derive(Serialize)]
 pub struct JsonCrate {
+    /// Crate name.
     pub name: String,
+    /// Crate version.
     pub version: String,
+    /// All ambient authority findings in this crate.
     pub findings: Vec<JsonFinding>,
 }
 
+/// A single finding in the JSON report.
 #[derive(Serialize)]
 pub struct JsonFinding {
+    /// Source file path.
     pub file: String,
+    /// Function containing the call.
     pub function: String,
+    /// Line number of the call.
     pub line: usize,
+    /// Column number of the call.
     pub col: usize,
+    /// The expanded call path (e.g., `"std::fs::read"`).
     pub call: String,
+    /// Category label (e.g., `"FS"`, `"NET"`).
     pub category: String,
+    /// Subcategory (e.g., `"read"`, `"connect"`).
     pub subcategory: String,
+    /// Risk level (e.g., `"high"`, `"critical"`).
     pub risk: String,
+    /// Human-readable description.
     pub description: String,
+    /// Whether this is inside a build.rs main() function.
     pub is_build_script: bool,
 }
 
+/// Aggregate statistics in the JSON report.
 #[derive(Serialize)]
 pub struct JsonSummary {
+    /// Total number of findings.
     pub total_findings: usize,
+    /// Number of crates with at least one finding.
     pub crates_with_findings: usize,
+    /// Finding count by category (e.g., `{"FS": 3, "NET": 1}`).
     pub by_category: BTreeMap<String, usize>,
+    /// Finding count by risk level (e.g., `{"high": 2, "critical": 1}`).
     pub by_risk: BTreeMap<String, usize>,
 }
 
+/// Formats findings as a pretty-printed JSON string.
+///
+/// The output conforms to the [`JsonReport`] schema and includes a summary
+/// with counts by category and risk level.
 pub fn report_json(findings: &[Finding]) -> String {
     let mut by_crate: BTreeMap<(String, String), Vec<&Finding>> = BTreeMap::new();
     for f in findings {
@@ -190,6 +229,11 @@ fn finding_to_json(f: &Finding) -> JsonFinding {
 
 // ── SARIF reporter ───────────────────────────────────────────────
 
+/// Formats findings as a [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
+/// JSON string, suitable for upload to GitHub Code Scanning.
+///
+/// Risk levels map to SARIF severity: `Critical` → `"error"`, `High` → `"warning"`,
+/// `Medium`/`Low` → `"note"`. Rule IDs follow the pattern `capsec/{category}/{subcategory}`.
 pub fn report_sarif(findings: &[Finding]) -> String {
     let results: Vec<serde_json::Value> = findings
         .iter()
