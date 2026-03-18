@@ -20,10 +20,15 @@ use syn::{ItemFn, Meta, Token, parse_macro_input};
 
 /// Declares the capability requirements of a function.
 ///
-/// Adds a `#[doc]` attribute for the lint tool. This macro does **not** emit
-/// compile-time trait bound assertions — actual enforcement comes from the
-/// `Has<P>` trait bounds on the function's capability parameter. The macro
-/// documents the intent and enables tooling.
+/// **This macro is documentation-only.** It adds a `#[doc]` attribute for
+/// tooling and human readers. It does **not** enforce anything at compile
+/// time — no trait bound assertions are emitted.
+///
+/// Actual enforcement comes from the `Has<P>` trait bounds on the function's
+/// capability parameter. If a function takes `cap: &impl Has<FsRead>`, the
+/// compiler will reject callers that pass the wrong capability type regardless
+/// of whether `#[requires]` is present. The macro exists to make the intent
+/// explicit and machine-readable.
 ///
 /// # Usage
 ///

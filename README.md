@@ -1,5 +1,10 @@
 # capsec
 
+[![CI](https://github.com/bordumb/capsec/actions/workflows/ci.yml/badge.svg)](https://github.com/bordumb/capsec/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/capsec.svg)](https://crates.io/crates/capsec)
+[![docs.rs](https://docs.rs/capsec/badge.svg)](https://docs.rs/capsec)
+[![License: MIT OR Apache-2.0](https://img.shields.io/crates/l/capsec.svg)](LICENSE)
+
 Capability-based security tooling for Rust.
 
 Rust guarantees memory safety. It does not guarantee your CSV parser isn't opening a TCP socket to phone home telemetry. `cargo audit` checks CVEs. `cargo vet` checks trust. Nothing tells you what the code actually *does*.
@@ -123,7 +128,7 @@ fn main() {
 }
 ```
 
-Every capability traces back to `root.grant()`. If a dependency tries to read files without being given a `Cap<FsRead>`, the code doesn't compile.
+Every capability traces back to `root.grant()`. If a function uses capsec wrappers (like `capsec::fs::read_to_string`) without being given a `Cap<FsRead>`, the code doesn't compile. The audit tool catches code that bypasses capsec wrappers entirely — calling `std::fs` directly, using FFI, or hiding I/O behind re-exports.
 
 ### What the compiler actually says
 
@@ -190,6 +195,32 @@ These are real `rustc` errors — no custom error framework, no runtime panics. 
 | Can any function open sockets? | Yes | Only if it has `Cap<NetConnect>` |
 | Can you audit who has what access? | Grep and pray | Grep for `Has<FsRead>` |
 | Runtime cost? | N/A | Zero — all types are erased at compile time |
+
+### Security model
+
+capsec protects against **cooperative safe Rust** — code that uses capsec wrappers cannot exceed its declared permissions, and the compiler enforces this at zero runtime cost.
+
+What capsec **does not** protect against:
+
+- **`unsafe` code** that forges capability tokens via `transmute`, `MaybeUninit`, or pointer tricks. The type system is sound only within safe Rust. (The adversarial test suite in `capsec-tests/tests/type_system.rs` documents these attacks and confirms they require `unsafe`.)
+- **Direct `std` calls** that bypass capsec wrappers. A function can always call `std::fs::read()` without a capability token — the compiler won't stop it. This is where `cargo capsec audit` comes in: it detects these calls statically.
+- **FFI and inline assembly** that interact with the OS directly. The audit tool flags `extern` blocks but cannot reason about what foreign code does.
+
+The two tools are complementary: the **type system** enforces boundaries within code that opts in, and the **audit tool** surfaces code that hasn't opted in yet. Neither is complete alone — together they provide defense in depth.
+
+For the full catalog of known evasion vectors and how each tool handles them, see [`capsec-tests/tests/audit_evasion.rs`](crates/capsec-tests/tests/audit_evasion.rs).
+
+### How capsec compares
+
+| Tool | Approach | Layer |
+|------|----------|-------|
+| **capsec** | Compile-time types (`Has<P>` bounds) + static audit | Source-level, cooperative |
+| **[cap-std](https://github.com/bytecodealliance/cap-std)** | Runtime capability handles (ambient authority removal) | OS-level, WASI-oriented |
+| **[cargo-scan](https://github.com/AlfredoSystems/cargo-scan)** | Static analysis of dangerous API usage | Source-level, research prototype |
+
+`cap-std` operates at a different layer — it replaces OS-level file descriptors with capability handles at runtime, targeting WASI sandboxing. capsec works at the type level with zero runtime cost and no OS support required. The two are complementary: you could use `cap-std` handles inside capsec-gated functions.
+
+`cargo-scan` (from UC San Diego) performs similar static analysis to `cargo capsec audit`. capsec adds the type-system enforcement layer and ships as a single workspace with both tools integrated.
 
 ---
 
