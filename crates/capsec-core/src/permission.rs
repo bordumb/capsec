@@ -88,7 +88,6 @@ impl Permission for EnvWrite {}
 impl Permission for Spawn {}
 impl Permission for Ambient {}
 
-
 // ── Subsumption ─────────────────────────────────────────────────
 
 /// Indicates that `Self` implies permission `P`.
