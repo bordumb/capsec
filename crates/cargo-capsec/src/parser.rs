@@ -39,6 +39,9 @@ pub struct ParsedFunction {
     pub calls: Vec<CallSite>,
     /// True if this is the `main()` function inside a `build.rs` file.
     pub is_build_script: bool,
+    /// Categories denied by `#[capsec::deny(...)]` on this function.
+    /// Parsed from `#[doc = "capsec::deny(...)"]` attributes.
+    pub deny_categories: Vec<String>,
 }
 
 /// A single call expression inside a function body.
@@ -174,6 +177,7 @@ impl<'ast> Visit<'ast> for FileVisitor {
             line: node.sig.ident.span().start().line,
             calls: Vec::new(),
             is_build_script: self.file_path.ends_with("build.rs") && node.sig.ident == "main",
+            deny_categories: extract_deny_categories(&node.attrs),
         };
 
         let prev = self.current_function.take();
@@ -193,6 +197,7 @@ impl<'ast> Visit<'ast> for FileVisitor {
             line: node.sig.ident.span().start().line,
             calls: Vec::new(),
             is_build_script: false,
+            deny_categories: extract_deny_categories(&node.attrs),
         };
 
         let prev = self.current_function.take();
@@ -214,6 +219,7 @@ impl<'ast> Visit<'ast> for FileVisitor {
                 line: node.sig.ident.span().start().line,
                 calls: Vec::new(),
                 is_build_script: false,
+                deny_categories: extract_deny_categories(&node.attrs),
             };
 
             let prev = self.current_function.take();
@@ -308,6 +314,40 @@ impl<'ast> Visit<'ast> for FileVisitor {
 
         syn::visit::visit_item_foreign_mod(self, node);
     }
+}
+
+/// Extracts denied categories from `#[doc = "capsec::deny(...)"]` attributes.
+///
+/// The `#[capsec::deny(...)]` macro emits a doc attribute like
+/// `#[doc = "capsec::deny(all, fs)"]`. This function parses that string
+/// and returns the category names (e.g., `["all", "fs"]`).
+fn extract_deny_categories(attrs: &[syn::Attribute]) -> Vec<String> {
+    let mut categories = Vec::new();
+    for attr in attrs {
+        if !attr.path().is_ident("doc") {
+            continue;
+        }
+        if let syn::Meta::NameValue(nv) = &attr.meta
+            && let syn::Expr::Lit(syn::ExprLit {
+                lit: syn::Lit::Str(lit_str),
+                ..
+            }) = &nv.value
+        {
+            let value = lit_str.value();
+            if let Some(inner) = value
+                .strip_prefix("capsec::deny(")
+                .and_then(|s| s.strip_suffix(')'))
+            {
+                for cat in inner.split(',') {
+                    let trimmed = cat.trim();
+                    if !trimmed.is_empty() {
+                        categories.push(trimmed.to_string());
+                    }
+                }
+            }
+        }
+    }
+    categories
 }
 
 fn collect_use_paths(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<ImportPath>) {
@@ -478,6 +518,38 @@ mod tests {
                 .map(|c| c.segments.join("::"))
                 .collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn parse_deny_annotation() {
+        let source = r#"
+            #[doc = "capsec::deny(all)"]
+            fn pure_function() {
+                let x = 1 + 2;
+            }
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        assert_eq!(parsed.functions.len(), 1);
+        assert_eq!(parsed.functions[0].deny_categories, vec!["all"]);
+    }
+
+    #[test]
+    fn parse_deny_specific_categories() {
+        let source = r#"
+            #[doc = "capsec::deny(fs, net)"]
+            fn no_io() {}
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        assert_eq!(parsed.functions[0].deny_categories, vec!["fs", "net"]);
+    }
+
+    #[test]
+    fn parse_no_deny_annotation() {
+        let source = r#"
+            fn normal() {}
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        assert!(parsed.functions[0].deny_categories.is_empty());
     }
 
     #[test]

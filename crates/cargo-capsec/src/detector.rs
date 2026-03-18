@@ -62,6 +62,10 @@ pub struct Finding {
     pub crate_name: String,
     /// Version of the crate containing this call.
     pub crate_version: String,
+    /// True if this finding is inside a `#[capsec::deny(...)]` function
+    /// whose denied categories cover this finding's category.
+    /// Deny violations are always promoted to `Critical` risk.
+    pub is_deny_violation: bool,
 }
 
 /// The ambient authority detector.
@@ -177,6 +181,7 @@ impl Detector {
                 // Custom path authorities
                 for (pattern, category, risk, description) in &self.custom_paths {
                     if matches_custom_path(expanded, pattern) {
+                        let deny_violation = is_category_denied(&func.deny_categories, category);
                         findings.push(Finding {
                             file: file.path.clone(),
                             function: func.name.clone(),
@@ -186,11 +191,20 @@ impl Detector {
                             call_text: expanded.join("::"),
                             category: category.clone(),
                             subcategory: "custom".to_string(),
-                            risk: *risk,
-                            description: description.clone(),
+                            risk: if deny_violation {
+                                Risk::Critical
+                            } else {
+                                *risk
+                            },
+                            description: if deny_violation {
+                                format!("DENY VIOLATION: {} (in #[deny] function)", description)
+                            } else {
+                                description.clone()
+                            },
                             is_build_script: func.is_build_script,
                             crate_name: crate_name.to_string(),
                             crate_version: crate_version.to_string(),
+                            is_deny_violation: deny_violation,
                         });
                         break;
                     }
@@ -226,7 +240,7 @@ impl Detector {
             }
         }
 
-        // Extern blocks
+        // Extern blocks (not inside a function, so no deny context)
         for ext in &file.extern_blocks {
             findings.push(Finding {
                 file: file.path.clone(),
@@ -246,6 +260,7 @@ impl Detector {
                 is_build_script: file.path.ends_with("build.rs"),
                 crate_name: crate_name.to_string(),
                 crate_version: crate_version.to_string(),
+                is_deny_violation: false,
             });
         }
 
@@ -267,6 +282,7 @@ fn make_finding(
     crate_name: &str,
     crate_version: &str,
 ) -> Finding {
+    let is_deny_violation = is_category_denied(&func.deny_categories, &authority.category);
     Finding {
         file: file.path.clone(),
         function: func.name.clone(),
@@ -276,12 +292,43 @@ fn make_finding(
         call_text: expanded.join("::"),
         category: authority.category.clone(),
         subcategory: authority.subcategory.to_string(),
-        risk: authority.risk,
-        description: authority.description.to_string(),
+        risk: if is_deny_violation {
+            Risk::Critical
+        } else {
+            authority.risk
+        },
+        description: if is_deny_violation {
+            format!(
+                "DENY VIOLATION: {} (in #[deny] function)",
+                authority.description
+            )
+        } else {
+            authority.description.to_string()
+        },
         is_build_script: func.is_build_script,
         crate_name: crate_name.to_string(),
         crate_version: crate_version.to_string(),
+        is_deny_violation,
     }
+}
+
+/// Checks if a finding's category is covered by the function's deny list.
+fn is_category_denied(deny_categories: &[String], finding_category: &Category) -> bool {
+    if deny_categories.is_empty() {
+        return false;
+    }
+    for denied in deny_categories {
+        match denied.as_str() {
+            "all" => return true,
+            "fs" if *finding_category == Category::Fs => return true,
+            "net" if *finding_category == Category::Net => return true,
+            "env" if *finding_category == Category::Env => return true,
+            "process" if *finding_category == Category::Process => return true,
+            "ffi" if *finding_category == Category::Ffi => return true,
+            _ => {}
+        }
+    }
+    false
 }
 
 type ImportMap = Vec<(String, Vec<String>)>;
@@ -512,6 +559,66 @@ mod tests {
                 f.call_col
             );
         }
+    }
+
+    #[test]
+    fn deny_violation_promotes_to_critical() {
+        let source = r#"
+            use std::fs;
+            #[doc = "capsec::deny(all)"]
+            fn pure_function() {
+                let _ = fs::read("secret.key");
+            }
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        let detector = Detector::new();
+        let findings = detector.analyse(&parsed, "test-crate", "0.1.0");
+        assert!(!findings.is_empty());
+        assert!(findings[0].is_deny_violation);
+        assert_eq!(findings[0].risk, Risk::Critical);
+        assert!(findings[0].description.contains("DENY VIOLATION"));
+    }
+
+    #[test]
+    fn deny_fs_only_flags_fs_not_net() {
+        let source = r#"
+            use std::fs;
+            use std::net::TcpStream;
+            #[doc = "capsec::deny(fs)"]
+            fn mostly_pure() {
+                let _ = fs::read("data");
+                let _ = TcpStream::connect("127.0.0.1:80");
+            }
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        let detector = Detector::new();
+        let findings = detector.analyse(&parsed, "test-crate", "0.1.0");
+        let fs_findings: Vec<_> = findings
+            .iter()
+            .filter(|f| f.category == Category::Fs)
+            .collect();
+        let net_findings: Vec<_> = findings
+            .iter()
+            .filter(|f| f.category == Category::Net)
+            .collect();
+        assert!(fs_findings[0].is_deny_violation);
+        assert_eq!(fs_findings[0].risk, Risk::Critical);
+        assert!(!net_findings[0].is_deny_violation);
+    }
+
+    #[test]
+    fn no_deny_annotation_no_violation() {
+        let source = r#"
+            use std::fs;
+            fn normal() {
+                let _ = fs::read("data");
+            }
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        let detector = Detector::new();
+        let findings = detector.analyse(&parsed, "test-crate", "0.1.0");
+        assert!(!findings.is_empty());
+        assert!(!findings[0].is_deny_violation);
     }
 
     #[test]

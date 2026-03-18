@@ -31,16 +31,28 @@ pub fn report_text(findings: &[Finding]) {
         println!("{}", "─".repeat(crate_key.len()));
 
         for f in crate_findings {
-            let colored_cat = colorize_category(&f.category);
-            println!(
-                "  {:<5} {}:{}:{}  {:<28} {}()",
-                colored_cat,
-                f.file.dimmed(),
-                f.call_line,
-                f.call_col,
-                f.call_text.bold(),
-                f.function,
-            );
+            if f.is_deny_violation {
+                println!(
+                    "  {} {}:{}:{}  {:<28} {}()",
+                    "DENY".red().bold(),
+                    f.file.dimmed(),
+                    f.call_line,
+                    f.call_col,
+                    f.call_text.bold(),
+                    f.function,
+                );
+            } else {
+                let colored_cat = colorize_category(&f.category);
+                println!(
+                    "  {:<5} {}:{}:{}  {:<28} {}()",
+                    colored_cat,
+                    f.file.dimmed(),
+                    f.call_line,
+                    f.call_col,
+                    f.call_text.bold(),
+                    f.function,
+                );
+            }
         }
     }
 
@@ -96,6 +108,19 @@ fn print_summary(findings: &[Finding], by_crate: &BTreeMap<String, Vec<&Finding>
 
     let critical = findings.iter().filter(|f| f.risk >= Risk::Critical).count();
     let high = findings.iter().filter(|f| f.risk == Risk::High).count();
+
+    let deny_violations = findings.iter().filter(|f| f.is_deny_violation).count();
+    if deny_violations > 0 {
+        println!(
+            "  {} {} (ambient authority in #[deny] function)",
+            format!("{deny_violations}").red().bold(),
+            if deny_violations == 1 {
+                "deny violation"
+            } else {
+                "deny violations"
+            }
+        );
+    }
 
     if critical > 0 {
         println!(
@@ -164,6 +189,8 @@ pub struct JsonFinding {
     pub description: String,
     /// Whether this is inside a build.rs main() function.
     pub is_build_script: bool,
+    /// Whether this is a deny violation (ambient authority in a #[deny] function).
+    pub is_deny_violation: bool,
 }
 
 /// Aggregate statistics in the JSON report.
@@ -236,6 +263,7 @@ fn finding_to_json(f: &Finding) -> JsonFinding {
         risk: f.risk.label().to_string(),
         description: f.description.clone(),
         is_build_script: f.is_build_script,
+        is_deny_violation: f.is_deny_violation,
     }
 }
 
@@ -354,6 +382,7 @@ mod tests {
                 is_build_script: false,
                 crate_name: "my-app".to_string(),
                 crate_version: "0.1.0".to_string(),
+                is_deny_violation: false,
             },
             Finding {
                 file: "src/net.rs".to_string(),
@@ -369,6 +398,7 @@ mod tests {
                 is_build_script: false,
                 crate_name: "my-app".to_string(),
                 crate_version: "0.1.0".to_string(),
+                is_deny_violation: false,
             },
         ]
     }
@@ -469,6 +499,7 @@ mod tests {
                 is_build_script: false,
                 crate_name: "app".to_string(),
                 crate_version: "0.1.0".to_string(),
+                is_deny_violation: false,
             },
             Finding {
                 file: "src/b.rs".to_string(),
@@ -484,6 +515,7 @@ mod tests {
                 is_build_script: false,
                 crate_name: "app".to_string(),
                 crate_version: "0.1.0".to_string(),
+                is_deny_violation: false,
             },
         ];
 
