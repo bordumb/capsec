@@ -188,7 +188,7 @@ pub struct CustomAuthority {
 /// Users can extend it with [`CustomAuthority`] entries from `.capsec.toml`.
 pub fn build_registry() -> Vec<Authority> {
     vec![
-        // ── Filesystem: std ──────────────────────────────────────
+        //  Filesystem: std
         Authority {
             pattern: AuthorityPattern::Path(&["std", "fs", "read"]),
             category: Category::Fs,
@@ -259,7 +259,7 @@ pub fn build_registry() -> Vec<Authority> {
             risk: Risk::Medium,
             description: "Copy a file",
         },
-        // ── Filesystem: File ─────────────────────────────────────
+        //  Filesystem: File
         Authority {
             pattern: AuthorityPattern::Path(&["File", "open"]),
             category: Category::Fs,
@@ -281,7 +281,7 @@ pub fn build_registry() -> Vec<Authority> {
             risk: Risk::Medium,
             description: "Open file with custom options",
         },
-        // ── Filesystem: tokio ────────────────────────────────────
+        //  Filesystem: tokio
         Authority {
             pattern: AuthorityPattern::Path(&["tokio", "fs", "read"]),
             category: Category::Fs,
@@ -310,7 +310,7 @@ pub fn build_registry() -> Vec<Authority> {
             risk: Risk::High,
             description: "Async delete a file",
         },
-        // ── Network: std ─────────────────────────────────────────
+        //  Network: std
         Authority {
             pattern: AuthorityPattern::Path(&["TcpStream", "connect"]),
             category: Category::Net,
@@ -343,7 +343,7 @@ pub fn build_registry() -> Vec<Authority> {
             risk: Risk::High,
             description: "Send UDP datagram to address",
         },
-        // ── Network: tokio ───────────────────────────────────────
+        //  Network: tokio
         Authority {
             pattern: AuthorityPattern::Path(&["tokio", "net", "TcpStream", "connect"]),
             category: Category::Net,
@@ -358,7 +358,7 @@ pub fn build_registry() -> Vec<Authority> {
             risk: Risk::High,
             description: "Async bind TCP listener",
         },
-        // ── Network: reqwest ─────────────────────────────────────
+        //  Network: reqwest
         Authority {
             pattern: AuthorityPattern::Path(&["reqwest", "get"]),
             category: Category::Net,
@@ -387,7 +387,7 @@ pub fn build_registry() -> Vec<Authority> {
             risk: Risk::High,
             description: "HTTP POST via client",
         },
-        // ── Network: hyper ───────────────────────────────────────
+        //  Network: hyper
         Authority {
             pattern: AuthorityPattern::Path(&["hyper", "Client", "request"]),
             category: Category::Net,
@@ -402,7 +402,7 @@ pub fn build_registry() -> Vec<Authority> {
             risk: Risk::High,
             description: "Bind Hyper HTTP server",
         },
-        // ── Environment ──────────────────────────────────────────
+        //  Environment
         // (no duplicate ["env", "var"] — import expansion handles `use std::env`)
         Authority {
             pattern: AuthorityPattern::Path(&["std", "env", "var"]),
@@ -446,7 +446,7 @@ pub fn build_registry() -> Vec<Authority> {
             risk: Risk::High,
             description: "Change working directory",
         },
-        // ── Process ──────────────────────────────────────────────
+        //  Process
         Authority {
             pattern: AuthorityPattern::Path(&["Command", "new"]),
             category: Category::Process,

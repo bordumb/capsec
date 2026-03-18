@@ -59,7 +59,7 @@ pub trait Has<P: Permission> {
     fn cap_ref(&self) -> Cap<P>;
 }
 
-// ── Direct: Cap<P> implements Has<P> ────────────────────────────
+//  Direct: Cap<P> implements Has<P>
 
 impl<P: Permission> Has<P> for Cap<P> {
     fn cap_ref(&self) -> Cap<P> {
@@ -67,7 +67,7 @@ impl<P: Permission> Has<P> for Cap<P> {
     }
 }
 
-// ── Subsumption: FsAll, NetAll ──────────────────────────────────
+//  Subsumption: FsAll, NetAll
 
 macro_rules! impl_subsumes {
     ($super:ty => $($sub:ty),+) => {
@@ -82,7 +82,7 @@ macro_rules! impl_subsumes {
 impl_subsumes!(FsAll => FsRead, FsWrite);
 impl_subsumes!(NetAll => NetConnect, NetBind);
 
-// ── Ambient: satisfies everything ───────────────────────────────
+//  Ambient: satisfies everything
 
 macro_rules! impl_ambient {
     ($($perm:ty),+) => {
@@ -98,7 +98,7 @@ impl_ambient!(
     FsRead, FsWrite, FsAll, NetConnect, NetBind, NetAll, EnvRead, EnvWrite, Spawn
 );
 
-// ── Tuples: Cap<(A, B)> satisfies Has<A> and Has<B> ──────────────
+//  Tuples: Cap<(A, B)> satisfies Has<A> and Has<B>
 //
 // Because Rust's coherence rules reject overlapping generic impls when A == B,
 // we enumerate all concrete permission pairs via two macros.

@@ -39,7 +39,7 @@
 /// can be used as capability tokens — external crates cannot forge new permissions.
 pub trait Permission: sealed::Sealed + 'static {}
 
-// ── Filesystem ──────────────────────────────────────────────────
+//  Filesystem
 
 /// Permission to read files, list directories, and check metadata.
 pub struct FsRead;
@@ -50,7 +50,7 @@ pub struct FsWrite;
 /// Permission for all filesystem operations. Subsumes [`FsRead`] and [`FsWrite`].
 pub struct FsAll;
 
-// ── Network ─────────────────────────────────────────────────────
+//  Network
 
 /// Permission to open outbound TCP and UDP connections.
 pub struct NetConnect;
@@ -61,7 +61,7 @@ pub struct NetBind;
 /// Permission for all network operations. Subsumes [`NetConnect`] and [`NetBind`].
 pub struct NetAll;
 
-// ── Environment ─────────────────────────────────────────────────
+//  Environment
 
 /// Permission to read environment variables.
 pub struct EnvRead;
@@ -69,12 +69,12 @@ pub struct EnvRead;
 /// Permission to modify or remove environment variables.
 pub struct EnvWrite;
 
-// ── Process ─────────────────────────────────────────────────────
+//  Process
 
 /// Permission to spawn and execute subprocesses via `std::process::Command`.
 pub struct Spawn;
 
-// ── Ambient ─────────────────────────────────────────────────────
+//  Ambient
 
 /// Full ambient authority — grants every permission.
 ///
@@ -82,7 +82,7 @@ pub struct Spawn;
 /// Use sparingly and only at the capability root.
 pub struct Ambient;
 
-// ── Permission impls ────────────────────────────────────────────
+//  Permission impls
 
 impl Permission for FsRead {}
 impl Permission for FsWrite {}
@@ -95,11 +95,11 @@ impl Permission for EnvWrite {}
 impl Permission for Spawn {}
 impl Permission for Ambient {}
 
-// ── Tuple permissions ─────────────────────────────────────────────
+//  Tuple permissions
 
 impl<A: Permission, B: Permission> Permission for (A, B) {}
 
-// ── Subsumption ─────────────────────────────────────────────────
+//  Subsumption
 
 /// Indicates that `Self` implies permission `P`.
 ///
@@ -114,7 +114,7 @@ impl Subsumes<NetConnect> for NetAll {}
 impl Subsumes<NetBind> for NetAll {}
 impl<P: Permission> Subsumes<P> for Ambient {}
 
-// ── Sealed ──────────────────────────────────────────────────────
+//  Sealed
 
 mod sealed {
     pub trait Sealed {}

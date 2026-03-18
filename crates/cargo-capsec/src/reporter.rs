@@ -117,7 +117,7 @@ fn group_by_crate(findings: &[Finding]) -> BTreeMap<String, Vec<&Finding>> {
     by_crate
 }
 
-// ── JSON reporter ────────────────────────────────────────────────
+//  JSON reporter
 
 /// Top-level JSON report structure, output by [`report_json`].
 #[derive(Serialize)]
@@ -239,7 +239,7 @@ fn finding_to_json(f: &Finding) -> JsonFinding {
     }
 }
 
-// ── SARIF reporter ───────────────────────────────────────────────
+//  SARIF reporter
 
 /// Formats findings as a [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html)
 /// JSON string, suitable for upload to GitHub Code Scanning.

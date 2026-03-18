@@ -28,7 +28,7 @@
 //! - **`capsec-macro`** — `#[requires]` and `#[deny]` proc macros
 //! - **`capsec-std`** — capability-gated `std` wrappers
 
-// ── Re-exports from capsec-core ─────────────────────────────────
+//  Re-exports from capsec-core
 
 pub use capsec_core::cap::{Cap, SendCap};
 pub use capsec_core::error::CapSecError;
@@ -44,11 +44,11 @@ pub use capsec_core::root::test_root;
 
 pub use capsec_core::attenuate::{Attenuated, DirScope, HostScope, Scope};
 
-// ── Re-exports from capsec-macro ────────────────────────────────
+//  Re-exports from capsec-macro
 
 pub use capsec_macro::{deny, requires};
 
-// ── Capability-gated std wrappers ───────────────────────────────
+//  Capability-gated std wrappers
 
 /// Capability-gated filesystem operations. See [`capsec_std::fs`].
 pub mod fs {
