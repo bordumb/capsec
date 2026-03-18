@@ -50,11 +50,20 @@ Also provides:
 
 ## Testing
 
-Use `capsec::test_root()` (requires the `test-support` feature) to bypass the singleton check in tests:
+`test_root()` bypasses the singleton check and is available in debug/test builds (`#[cfg(debug_assertions)]`). It cannot be enabled in release builds — there is no feature flag:
 
-```toml
-[dev-dependencies]
-capsec = { version = "0.1", features = ["test-support"] }
+```rust,ignore
+#[cfg(test)]
+mod tests {
+    use capsec::test_root;
+
+    #[test]
+    fn my_test() {
+        let root = test_root();
+        let cap = root.fs_read();
+        // ...
+    }
+}
 ```
 
 ## License

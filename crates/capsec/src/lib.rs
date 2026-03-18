@@ -39,7 +39,7 @@ pub use capsec_core::permission::{
 };
 pub use capsec_core::root::{CapRoot, root, try_root};
 
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(debug_assertions)]
 pub use capsec_core::root::test_root;
 
 pub use capsec_core::attenuate::{Attenuated, DirScope, HostScope, Scope};

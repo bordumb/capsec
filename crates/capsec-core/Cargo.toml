@@ -8,15 +8,8 @@ description = "Core capability types for compile-time capability-based security 
 keywords = ["security", "capability", "type-system", "least-privilege"]
 categories = ["rust-patterns", "no-std::no-alloc"]
 
-[features]
-test-support = []
-
 [dependencies]
 thiserror.workspace = true
 
-[package.metadata.docs.rs]
-features = ["test-support"]
-
-# Enable test-support for doctests
 [lints.rust]
 unexpected_cfgs = { level = "allow", check-cfg = ['cfg(doc)'] }

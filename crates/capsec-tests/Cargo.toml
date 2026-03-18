@@ -7,10 +7,10 @@ publish = false
 description = "Adversarial security tests for capsec"
 
 [dependencies]
-capsec-core = { path = "../capsec-core", features = ["test-support"] }
+capsec-core = { path = "../capsec-core" }
 capsec-std = { path = "../capsec-std" }
 capsec-macro = { path = "../capsec-macro" }
-capsec = { path = "../capsec", features = ["test-support"] }
+capsec = { path = "../capsec" }
 cargo-capsec = { path = "../cargo-capsec" }
 
 [dev-dependencies]

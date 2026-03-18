@@ -12,9 +12,8 @@
 //!
 //! # Testing
 //!
-//! `test_root()` bypasses the singleton check and is available under `#[cfg(test)]`
-//! or the `test-support` feature flag. Use it in unit tests to avoid singleton
-//! conflicts across parallel test threads.
+//! `test_root()` bypasses the singleton check and is available in debug/test builds
+//! (`#[cfg(debug_assertions)]`). It cannot be enabled in release builds.
 
 use crate::cap::Cap;
 use crate::permission::*;
@@ -63,9 +62,10 @@ pub fn try_root() -> Option<CapRoot> {
 
 /// Creates a capability root for testing. Bypasses the singleton check.
 ///
-/// Available under `#[cfg(test)]` and the `test-support` feature flag.
+/// Available in debug/test builds only (`#[cfg(debug_assertions)]`).
+/// Cannot be enabled in release builds — there is no feature flag.
 /// Can be called multiple times without panicking — essential for parallel tests.
-#[cfg(any(test, feature = "test-support"))]
+#[cfg(debug_assertions)]
 pub fn test_root() -> CapRoot {
     CapRoot { _private: () }
 }

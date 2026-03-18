@@ -28,4 +28,4 @@ capsec-std.workspace = true
 [dev-dependencies]
 insta.workspace = true
 tempfile = "3"
-capsec-core = { workspace = true, features = ["test-support"] }
+capsec-core.workspace = true
