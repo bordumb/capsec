@@ -74,7 +74,7 @@ fn sync_data(config: &Config, ctx: &AppCtx) -> Result<()> {
 
 ### `#[capsec::deny(...)]`
 
-Marks a function as capability-free. The `cargo capsec check` lint tool will flag any ambient authority call inside it.
+Marks a function as capability-free. `cargo capsec audit` will promote any ambient authority call inside a `#[deny]` function to **critical** risk.
 
 ```rust,ignore
 #[capsec::deny(all)]

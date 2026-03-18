@@ -160,13 +160,14 @@ TRYBUILD=overwrite cargo test -p capsec --test compile_tests
 
 ## Context pattern and macros
 
-capsec provides three ergonomic macros that work together:
+capsec provides four macros that work together:
 
 | Macro | Purpose |
 |-------|---------|
 | `#[capsec::context]` | Generates `Has<P>` impls on a struct, turning it into a capability context |
 | `#[capsec::main]` | Injects `CapRoot` creation into a function entry point |
 | `#[capsec::requires]` | Validates that a function's parameters satisfy declared permissions |
+| `#[capsec::deny]` | Marks a function as capability-free; violations are promoted to critical by the audit tool |
 
 When developing macros in `capsec-macro`:
 

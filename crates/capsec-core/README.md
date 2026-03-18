@@ -24,7 +24,7 @@ use capsec_core::root::test_root;
 use capsec_core::permission::FsRead;
 use capsec_core::has::Has;
 
-let root = test_root();
+let root = test_root(); // available in debug/test builds only
 
 // Turbofish or convenience method — both work:
 let cap = root.grant::<FsRead>();

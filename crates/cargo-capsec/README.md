@@ -90,6 +90,23 @@ crate = "tracing"
 reason = "Logging framework, reviewed"
 ```
 
+## `#[capsec::deny]` enforcement
+
+The audit tool honors `#[capsec::deny(...)]` annotations. Any ambient authority call inside a `#[deny]`-annotated function is promoted to **critical** risk and tagged as a deny violation:
+
+```
+my-app v0.1.0
+─────────────
+  DENY  src/parser.rs:42:9  std::fs::read  in #[deny(all)] function parse_config()
+
+Summary
+───────
+  1 deny violation (ambient authority in #[deny] function)
+  1 critical-risk findings
+```
+
+Use `--fail-on critical` in CI to catch deny violations alongside other critical findings.
+
 ## Limitations
 
 - **Use aliases**: `use std::fs::read as r; r(...)` — the import is flagged, but the bare aliased call may not be detected in all cases.
