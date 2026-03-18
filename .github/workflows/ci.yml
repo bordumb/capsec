@@ -45,3 +45,12 @@ jobs:
         with:
           components: rustfmt
       - run: cargo fmt --check --all
+
+  capsec-audit:
+    name: Capability Audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo build -p cargo-capsec
+      - run: cargo run -p cargo-capsec -- capsec audit --fail-on high --quiet
