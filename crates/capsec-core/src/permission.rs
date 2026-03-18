@@ -88,10 +88,6 @@ impl Permission for EnvWrite {}
 impl Permission for Spawn {}
 impl Permission for Ambient {}
 
-/// Tuples of permissions are themselves permissions, enabling composition.
-/// `Cap<(FsRead, NetConnect)>` proves the holder can do both.
-impl<A: Permission, B: Permission> Permission for (A, B) {}
-
 // ── Subsumption ─────────────────────────────────────────────────
 
 /// Indicates that `Self` implies permission `P`.
@@ -121,7 +117,6 @@ mod sealed {
     impl Sealed for super::EnvWrite {}
     impl Sealed for super::Spawn {}
     impl Sealed for super::Ambient {}
-    impl<A: Sealed, B: Sealed> Sealed for (A, B) {}
 }
 
 #[cfg(test)]
@@ -141,11 +136,6 @@ mod tests {
         assert_eq!(size_of::<EnvWrite>(), 0);
         assert_eq!(size_of::<Spawn>(), 0);
         assert_eq!(size_of::<Ambient>(), 0);
-    }
-
-    #[test]
-    fn tuple_permission_is_zst() {
-        assert_eq!(size_of::<(FsRead, NetConnect)>(), 0);
     }
 
     // Compile-time proof that subsumption relationships hold:

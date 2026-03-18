@@ -83,11 +83,8 @@ impl CapRoot {
     /// # use capsec_core::permission::{FsRead, NetConnect};
     /// let root = test_root();
     ///
-    /// // Grant individual capabilities
     /// let fs_cap = root.grant::<FsRead>();
-    ///
-    /// // Grant composed capabilities
-    /// let multi_cap = root.grant::<(FsRead, NetConnect)>();
+    /// let net_cap = root.grant::<NetConnect>();
     /// ```
     pub fn grant<P: Permission>(&self) -> Cap<P> {
         Cap::new()
