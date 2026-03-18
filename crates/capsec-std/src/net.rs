@@ -11,8 +11,9 @@ use std::net::{TcpListener, TcpStream, ToSocketAddrs, UdpSocket};
 /// Requires [`NetConnect`] permission.
 pub fn tcp_connect(
     addr: impl ToSocketAddrs,
-    _cap: &impl Has<NetConnect>,
+    cap: &impl Has<NetConnect>,
 ) -> Result<TcpStream, CapSecError> {
+    let _ = cap.cap_ref();
     Ok(TcpStream::connect(addr)?)
 }
 
@@ -20,8 +21,9 @@ pub fn tcp_connect(
 /// Requires [`NetBind`] permission.
 pub fn tcp_bind(
     addr: impl ToSocketAddrs,
-    _cap: &impl Has<NetBind>,
+    cap: &impl Has<NetBind>,
 ) -> Result<TcpListener, CapSecError> {
+    let _ = cap.cap_ref();
     Ok(TcpListener::bind(addr)?)
 }
 
@@ -29,7 +31,8 @@ pub fn tcp_bind(
 /// Requires [`NetBind`] permission.
 pub fn udp_bind(
     addr: impl ToSocketAddrs,
-    _cap: &impl Has<NetBind>,
+    cap: &impl Has<NetBind>,
 ) -> Result<UdpSocket, CapSecError> {
+    let _ = cap.cap_ref();
     Ok(UdpSocket::bind(addr)?)
 }

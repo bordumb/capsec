@@ -37,8 +37,8 @@ use crate::permission::*;
 
 /// Proof that a capability token includes permission `P`.
 ///
-/// Implement this on your capability types. In practice, you'll use the built-in
-/// implementations on [`Cap<P>`](crate::cap::Cap) and its subsumption types.
+/// This trait is **sealed** — it cannot be implemented outside `capsec-core`.
+/// Use [`CapRoot::grant()`](crate::root::CapRoot::grant) to obtain capability tokens.
 ///
 /// # Example
 ///
@@ -54,9 +54,26 @@ use crate::permission::*;
 /// let cap = root.grant::<FsRead>();
 /// needs_fs(&cap);
 /// ```
-pub trait Has<P: Permission> {
+#[allow(private_bounds)]
+pub trait Has<P: Permission>: sealed::Sealed<P> {
     /// Returns a new `Cap<P>` proving the permission is available.
     fn cap_ref(&self) -> Cap<P>;
+}
+
+//  Sealed supertrait for Has<P> — prevents external implementations.
+//
+// This is separate from the `sealed` module in `permission.rs`, which seals the
+// Permission trait (controlling which types can be permissions). This module seals
+// the Has trait (controlling which types can claim to hold a permission).
+
+mod sealed {
+    use crate::cap::Cap;
+    use crate::permission::Permission;
+
+    pub trait Sealed<P: Permission> {}
+
+    // Direct: Cap<P> satisfies Has<P> for any permission P
+    impl<P: Permission> Sealed<P> for Cap<P> {}
 }
 
 //  Direct: Cap<P> implements Has<P>
@@ -72,6 +89,7 @@ impl<P: Permission> Has<P> for Cap<P> {
 macro_rules! impl_subsumes {
     ($super:ty => $($sub:ty),+) => {
         $(
+            impl sealed::Sealed<$sub> for Cap<$super> {}
             impl Has<$sub> for Cap<$super> {
                 fn cap_ref(&self) -> Cap<$sub> { Cap::new() }
             }
@@ -91,6 +109,7 @@ impl_subsumes!(NetAll => NetConnect, NetBind);
 macro_rules! impl_ambient {
     ($($perm:ty),+) => {
         $(
+            impl sealed::Sealed<$perm> for Cap<Ambient> {}
             impl Has<$perm> for Cap<Ambient> {
                 fn cap_ref(&self) -> Cap<$perm> { Cap::new() }
             }
@@ -118,6 +137,7 @@ macro_rules! impl_tuple_has_first {
     };
     (@inner $a:ident; [$($b:ident),+]) => {
         $(
+            impl sealed::Sealed<$a> for Cap<($a, $b)> {}
             impl Has<$a> for Cap<($a, $b)> {
                 fn cap_ref(&self) -> Cap<$a> { Cap::new() }
             }
@@ -128,9 +148,11 @@ macro_rules! impl_tuple_has_first {
 macro_rules! impl_tuple_has_second {
     ($first:ident $(, $rest:ident)+) => {
         $(
+            impl sealed::Sealed<$first> for Cap<($rest, $first)> {}
             impl Has<$first> for Cap<($rest, $first)> {
                 fn cap_ref(&self) -> Cap<$first> { Cap::new() }
             }
+            impl sealed::Sealed<$rest> for Cap<($first, $rest)> {}
             impl Has<$rest> for Cap<($first, $rest)> {
                 fn cap_ref(&self) -> Cap<$rest> { Cap::new() }
             }

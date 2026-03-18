@@ -61,14 +61,12 @@ fn dirscope_rejects_nonexistent_root() {
 fn hostscope_prefix_collision_attack() {
     let scope = HostScope::new(["api.example.com"]);
 
-    // VULNERABILITY: prefix matching allows subdomain spoofing
-    // "api.example.com.evil.com" starts with "api.example.com"
+    // FIXED: prefix matching now requires a boundary character (end, ':', '/')
+    // after the allowed host, preventing "api.example.com.evil.com" from matching.
     let result = scope.check("api.example.com.evil.com");
     assert!(
-        result.is_ok(),
-        "BUG: HostScope prefix matching allows domain spoofing. \
-         'api.example.com.evil.com' starts with 'api.example.com'. \
-         If this test fails, the prefix collision has been FIXED (good!)."
+        result.is_err(),
+        "Domain spoofing via prefix collision should be rejected"
     );
 }
 
@@ -91,6 +89,27 @@ fn hostscope_allows_path_suffix() {
     let scope = HostScope::new(["api.example.com"]);
     let result = scope.check("api.example.com/api/v1");
     assert!(result.is_ok(), "Path suffix should be allowed");
+}
+
+#[test]
+fn hostscope_allows_exact_match() {
+    let scope = HostScope::new(["api.example.com"]);
+    let result = scope.check("api.example.com");
+    assert!(
+        result.is_ok(),
+        "Exact host match with no trailing character should be allowed"
+    );
+}
+
+#[test]
+fn hostscope_rejects_subdomain_spoofing() {
+    let scope = HostScope::new(["api.example.com"]);
+    // Subdomain-style spoofing: the allowed host appears as a prefix of a longer domain
+    assert!(scope.check("api.example.com.evil.com").is_err());
+    assert!(scope.check("api.example.comspoofed").is_err());
+    // But legitimate suffixes still work
+    assert!(scope.check("api.example.com:8080").is_ok());
+    assert!(scope.check("api.example.com/path/to/resource").is_ok());
 }
 
 #[test]

@@ -11,5 +11,5 @@ note: function defined here
   |        ^^^^^^^^^^^^^^
 help: provide the argument
   |
-3 |     let _ = capsec::fs::read_to_string("/etc/passwd", /* _cap */);
-  |                                                     ++++++++++++
+3 |     let _ = capsec::fs::read_to_string("/etc/passwd", /* cap */);
+  |                                                     +++++++++++

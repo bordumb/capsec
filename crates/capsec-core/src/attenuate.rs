@@ -135,7 +135,17 @@ impl HostScope {
 
 impl Scope for HostScope {
     fn check(&self, target: &str) -> Result<(), CapSecError> {
-        if self.allowed.iter().any(|h| target.starts_with(h.as_str())) {
+        let matches = self.allowed.iter().any(|h| {
+            if target.starts_with(h.as_str()) {
+                // After the prefix, the next character must be a boundary
+                // (end-of-string, ':', or '/') to prevent "api.example.com.evil.com"
+                // from matching "api.example.com".
+                matches!(target.as_bytes().get(h.len()), None | Some(b':' | b'/'))
+            } else {
+                false
+            }
+        });
+        if matches {
             Ok(())
         } else {
             Err(CapSecError::OutOfScope {
