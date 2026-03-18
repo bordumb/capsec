@@ -246,17 +246,51 @@ fn finding_to_json(f: &Finding) -> JsonFinding {
 ///
 /// Risk levels map to SARIF severity: `Critical` → `"error"`, `High` → `"warning"`,
 /// `Medium`/`Low` → `"note"`. Rule IDs follow the pattern `capsec/{category}/{subcategory}`.
+///
+/// The output includes a `rules` array in `tool.driver` with descriptions and default
+/// severity for each rule, and each result carries a `ruleIndex` pointing into that array.
+/// This is required for GitHub Code Scanning to display rule metadata in the Security tab.
 pub fn report_sarif(findings: &[Finding]) -> String {
+    // Build deduplicated rules array. Each unique ruleId gets one entry.
+    // Use BTreeMap for deterministic ordering.
+    let mut rule_index_map: BTreeMap<String, usize> = BTreeMap::new();
+    let mut rules: Vec<serde_json::Value> = Vec::new();
+
+    for f in findings {
+        let rule_id = format!(
+            "capsec/{}/{}",
+            f.category.label().to_lowercase(),
+            f.subcategory
+        );
+        if !rule_index_map.contains_key(&rule_id) {
+            let idx = rules.len();
+            rule_index_map.insert(rule_id.clone(), idx);
+            rules.push(serde_json::json!({
+                "id": rule_id,
+                "shortDescription": {
+                    "text": f.description
+                },
+                "defaultConfiguration": {
+                    "level": risk_to_sarif_level(f.risk)
+                },
+                "helpUri": "https://github.com/bordumb/capsec"
+            }));
+        }
+    }
+
     let results: Vec<serde_json::Value> = findings
         .iter()
         .map(|f| {
+            let rule_id = format!(
+                "capsec/{}/{}",
+                f.category.label().to_lowercase(),
+                f.subcategory
+            );
+            let rule_index = rule_index_map[&rule_id];
             serde_json::json!({
-                "ruleId": format!("capsec/{}/{}", f.category.label().to_lowercase(), f.subcategory),
-                "level": match f.risk {
-                    Risk::Critical => "error",
-                    Risk::High => "warning",
-                    _ => "note",
-                },
+                "ruleId": rule_id,
+                "ruleIndex": rule_index,
+                "level": risk_to_sarif_level(f.risk),
                 "message": {
                     "text": format!("{}: {} in {}()", f.description, f.call_text, f.function)
                 },
@@ -281,6 +315,8 @@ pub fn report_sarif(findings: &[Finding]) -> String {
                 "driver": {
                     "name": "capsec-cli",
                     "version": env!("CARGO_PKG_VERSION"),
+                    "informationUri": "https://github.com/bordumb/capsec",
+                    "rules": rules
                 }
             },
             "results": results
@@ -288,6 +324,14 @@ pub fn report_sarif(findings: &[Finding]) -> String {
     });
 
     serde_json::to_string_pretty(&sarif).unwrap_or_default()
+}
+
+fn risk_to_sarif_level(risk: Risk) -> &'static str {
+    match risk {
+        Risk::Critical => "error",
+        Risk::High => "warning",
+        _ => "note",
+    }
 }
 
 #[cfg(test)]
@@ -345,6 +389,132 @@ mod tests {
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         assert_eq!(parsed["version"], "2.1.0");
         assert_eq!(parsed["runs"][0]["results"].as_array().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn sarif_has_rules_array() {
+        let findings = sample_findings();
+        let sarif_str = report_sarif(&findings);
+        let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
+
+        let driver = &parsed["runs"][0]["tool"]["driver"];
+        assert!(
+            driver["informationUri"].is_string(),
+            "driver should have informationUri"
+        );
+
+        let rules = driver["rules"]
+            .as_array()
+            .expect("driver should have rules array");
+        assert_eq!(rules.len(), 2, "two distinct rule IDs from sample findings");
+
+        // Each rule must have required SARIF fields
+        for rule in rules {
+            assert!(rule["id"].is_string(), "rule must have id");
+            assert!(
+                rule["shortDescription"]["text"].is_string(),
+                "rule must have shortDescription.text"
+            );
+            assert!(
+                rule["defaultConfiguration"]["level"].is_string(),
+                "rule must have defaultConfiguration.level"
+            );
+            assert!(rule["helpUri"].is_string(), "rule must have helpUri");
+        }
+    }
+
+    #[test]
+    fn sarif_results_have_valid_rule_index() {
+        let findings = sample_findings();
+        let sarif_str = report_sarif(&findings);
+        let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
+
+        let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
+            .as_array()
+            .unwrap();
+        let results = parsed["runs"][0]["results"].as_array().unwrap();
+
+        for result in results {
+            let rule_index = result["ruleIndex"]
+                .as_u64()
+                .expect("each result must have ruleIndex") as usize;
+            assert!(
+                rule_index < rules.len(),
+                "ruleIndex {rule_index} must be within rules array (len {})",
+                rules.len()
+            );
+
+            // ruleId must match the rule at ruleIndex
+            let rule_id = result["ruleId"].as_str().unwrap();
+            let indexed_id = rules[rule_index]["id"].as_str().unwrap();
+            assert_eq!(rule_id, indexed_id, "ruleId must match rules[ruleIndex].id");
+        }
+    }
+
+    #[test]
+    fn sarif_deduplicates_rules() {
+        // Two findings with the same category+subcategory should produce one rule
+        let findings = vec![
+            Finding {
+                file: "src/a.rs".to_string(),
+                function: "a".to_string(),
+                function_line: 1,
+                call_line: 2,
+                call_col: 5,
+                call_text: "std::fs::read".to_string(),
+                category: Category::Fs,
+                subcategory: "read".to_string(),
+                risk: Risk::Medium,
+                description: "Read arbitrary file".to_string(),
+                is_build_script: false,
+                crate_name: "app".to_string(),
+                crate_version: "0.1.0".to_string(),
+            },
+            Finding {
+                file: "src/b.rs".to_string(),
+                function: "b".to_string(),
+                function_line: 10,
+                call_line: 12,
+                call_col: 9,
+                call_text: "std::fs::read_to_string".to_string(),
+                category: Category::Fs,
+                subcategory: "read".to_string(),
+                risk: Risk::Medium,
+                description: "Read arbitrary file as string".to_string(),
+                is_build_script: false,
+                crate_name: "app".to_string(),
+                crate_version: "0.1.0".to_string(),
+            },
+        ];
+
+        let sarif_str = report_sarif(&findings);
+        let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
+        let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
+            .as_array()
+            .unwrap();
+
+        assert_eq!(
+            rules.len(),
+            1,
+            "two findings with same ruleId should produce one rule"
+        );
+        assert_eq!(rules[0]["id"], "capsec/fs/read");
+
+        // Both results should point to rule index 0
+        let results = parsed["runs"][0]["results"].as_array().unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0]["ruleIndex"], 0);
+        assert_eq!(results[1]["ruleIndex"], 0);
+    }
+
+    #[test]
+    fn sarif_empty_findings_has_empty_rules() {
+        let sarif_str = report_sarif(&[]);
+        let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
+        let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
+            .as_array()
+            .unwrap();
+        assert!(rules.is_empty(), "no findings should produce no rules");
     }
 
     #[test]

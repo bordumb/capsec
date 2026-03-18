@@ -8,7 +8,7 @@ You probably want to depend on the `capsec` facade crate instead of using this d
 
 ### `#[capsec::requires(...)]`
 
-Declares a function's capability requirements. Documents intent and enables tooling.
+Declares a function's capability requirements. **This macro is documentation-only** — it does not enforce anything at compile time. Actual enforcement comes from the `Has<P>` trait bounds on the function's capability parameter. The macro makes the intent explicit for tooling and human readers.
 
 ```rust,ignore
 #[capsec::requires(fs::read, net::connect)]
