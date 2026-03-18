@@ -39,8 +39,17 @@ cargo capsec audit --fail-on critical
 cargo capsec audit --baseline
 cargo capsec audit --diff
 
+# Skip known-good crates
+cargo capsec audit --skip my-cli,xtask
+
+# Only scan specific crates
+cargo capsec audit --only my-core,my-sdk
+
 # SARIF output for GitHub Code Scanning
 cargo capsec audit --format sarif > capsec.sarif
+
+# Suppress output, exit code only (for CI)
+cargo capsec audit --quiet --fail-on high
 ```
 
 ## Output example
