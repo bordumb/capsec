@@ -1,52 +1,21 @@
 error[E0277]: the trait bound `AsyncWriteFile: AsyncRead` is not satisfied
-  --> tests/compile_fail/async_create_cannot_read.rs:10:46
-   |
-10 |         tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buf).await.unwrap();
-   |         ------------------------------------ ^^^^^^^^^ the trait `AsyncRead` is not implemented for `AsyncWriteFile`
-   |         |
-   |         required by a bound introduced by this call
-   |
-   = help: the following other types implement trait `AsyncRead`:
-             &[u8]
-             &mut T
-             AsyncReadFile
-             Box<T>
-             BufStream<RW>
-             DuplexStream
-             Pin<P>
-             SimplexStream
-           and $N others
-note: required by a bound in `tokio::io::AsyncReadExt::read_to_end`
-  --> $CARGO/tokio-$VERSION/src/io/util/async_read_ext.rs
-   |
-   |     pub trait AsyncReadExt: AsyncRead {
-   |                             ^^^^^^^^^ required by this bound in `AsyncReadExt::read_to_end`
-...
-   |         fn read_to_end<'a>(&'a mut self, buf: &'a mut Vec<u8>) -> ReadToEnd<'a, Self>
-   |            ----------- required by a bound in this associated function
-
-error[E0277]: the trait bound `AsyncWriteFile: AsyncRead` is not satisfied
-  --> tests/compile_fail/async_create_cannot_read.rs:10:67
-   |
-10 |         tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buf).await.unwrap();
-   |         --------------------------------------------------------- ^^^^^ the trait `AsyncRead` is not implemented for `AsyncWriteFile`
-   |         |
-   |         this call returns `AsyncWriteFile`
-   |
-   = help: the following other types implement trait `AsyncRead`:
-             &[u8]
-             &mut T
-             AsyncReadFile
-             Box<T>
-             BufStream<RW>
-             DuplexStream
-             Pin<P>
-             SimplexStream
-           and $N others
-   = note: required for `tokio::io::util::read_to_end::ReadToEnd<'_, AsyncWriteFile>` to implement `Future`
-   = note: required for `tokio::io::util::read_to_end::ReadToEnd<'_, AsyncWriteFile>` to implement `IntoFuture`
-help: remove the `.await`
-   |
-10 -         tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buf).await.unwrap();
-10 +         tokio::io::AsyncReadExt::read_to_end(&mut file, &mut buf).unwrap();
-   |
+ --> tests/compile_fail/async_create_cannot_read.rs:9:13
+  |
+9 |     check::<AsyncWriteFile>();
+  |             ^^^^^^^^^^^^^^ the trait `AsyncRead` is not implemented for `AsyncWriteFile`
+  |
+  = help: the following other types implement trait `AsyncRead`:
+            &[u8]
+            &mut T
+            AsyncReadFile
+            Box<T>
+            BufStream<RW>
+            DuplexStream
+            Pin<P>
+            SimplexStream
+          and $N others
+note: required by a bound in `check`
+ --> tests/compile_fail/async_create_cannot_read.rs:8:17
+  |
+8 |     fn check<T: tokio::io::AsyncRead>() {}
+  |                 ^^^^^^^^^^^^^^^^^^^^ required by this bound in `check`

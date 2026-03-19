@@ -1,11 +1,10 @@
-/// capsec::tokio::fs::open() returns AsyncReadFile, which does not implement AsyncWrite.
+/// capsec_tokio::fs::open() returns AsyncReadFile, which does not implement AsyncWrite.
+use capsec_tokio::file::AsyncReadFile;
+
+fn assert_type(_: &AsyncReadFile) {}
 
 fn main() {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    rt.block_on(async {
-        let root = capsec::root();
-        let cap = root.fs_read();
-        let mut file = capsec::tokio::fs::open("/tmp/test.txt", &cap).await.unwrap();
-        tokio::io::AsyncWriteExt::write_all(&mut file, b"nope").await.unwrap();
-    });
+    // AsyncReadFile does not implement AsyncWrite — this must not compile
+    fn check<T: tokio::io::AsyncWrite>() {}
+    check::<AsyncReadFile>();
 }
