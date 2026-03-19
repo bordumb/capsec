@@ -1,0 +1,24 @@
+[package]
+name = "capsec-tokio"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Async capability-gated wrappers for tokio — the async counterpart to capsec-std"
+keywords = ["security", "capability", "tokio", "async"]
+categories = ["asynchronous", "rust-patterns"]
+
+[features]
+fs = ["dep:tokio", "tokio/fs"]
+net = ["dep:tokio", "tokio/net"]
+process = ["dep:tokio", "tokio/process"]
+io-util = ["dep:tokio", "tokio/io-util"]
+full = ["fs", "net", "process", "io-util"]
+
+[dependencies]
+capsec-core.workspace = true
+tokio = { version = "1", default-features = false, optional = true }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "net", "process", "io-util"] }
+capsec-macro = { path = "../capsec-macro" }

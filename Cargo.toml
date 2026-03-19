@@ -6,6 +6,7 @@ members = [
     "crates/capsec-std",
     "crates/capsec",
     "crates/cargo-capsec",
+    "crates/capsec-tokio",
     "crates/capsec-tests",
 ]
 
@@ -49,3 +50,4 @@ insta = { version = "1", features = ["yaml"] }
 capsec-core = { path = "crates/capsec-core", version = "0.1.0" }
 capsec-macro = { path = "crates/capsec-macro", version = "0.1.0" }
 capsec-std = { path = "crates/capsec-std", version = "0.1.0" }
+capsec-tokio = { path = "crates/capsec-tokio", version = "0.1.0" }

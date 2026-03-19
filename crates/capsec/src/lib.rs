@@ -79,6 +79,30 @@ pub mod process {
     pub use capsec_std::process::*;
 }
 
+//  Async capability-gated tokio wrappers (optional)
+
+/// Async capability-gated wrappers for tokio. Requires the `tokio` feature.
+///
+/// ```toml
+/// capsec = { version = "0.1", features = ["tokio"] }
+/// ```
+#[cfg(feature = "tokio")]
+pub mod tokio {
+    /// Async capability-gated filesystem operations.
+    pub mod fs {
+        pub use capsec_tokio::file::{AsyncReadFile, AsyncWriteFile};
+        pub use capsec_tokio::fs::*;
+    }
+    /// Async capability-gated network operations.
+    pub mod net {
+        pub use capsec_tokio::net::*;
+    }
+    /// Async capability-gated subprocess execution.
+    pub mod process {
+        pub use capsec_tokio::process::*;
+    }
+}
+
 /// Common imports for working with capsec.
 ///
 /// ```

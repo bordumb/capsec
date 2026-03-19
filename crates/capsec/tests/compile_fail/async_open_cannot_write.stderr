@@ -1,0 +1,21 @@
+error[E0277]: the trait bound `AsyncReadFile: AsyncWrite` is not satisfied
+ --> tests/compile_fail/async_open_cannot_write.rs:9:13
+  |
+9 |     check::<AsyncReadFile>();
+  |             ^^^^^^^^^^^^^ the trait `AsyncWrite` is not implemented for `AsyncReadFile`
+  |
+  = help: the following other types implement trait `AsyncWrite`:
+            &mut T
+            AsyncWriteFile
+            Box<T>
+            BufStream<RW>
+            DuplexStream
+            Pin<P>
+            SimplexStream
+            Vec<u8>
+          and $N others
+note: required by a bound in `check`
+ --> tests/compile_fail/async_open_cannot_write.rs:8:17
+  |
+8 |     fn check<T: tokio::io::AsyncWrite>() {}
+  |                 ^^^^^^^^^^^^^^^^^^^^^ required by this bound in `check`

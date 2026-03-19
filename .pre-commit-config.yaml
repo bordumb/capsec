@@ -15,9 +15,6 @@ repos:
 
   - repo: local
     hooks:
-      # ── Fast gates (commit) ────────────────────────────────────────
-      # Run on every `git commit`. Should take < 5 seconds incrementally.
-
       - id: cargo-fmt
         name: cargo fmt
         entry: cargo fmt --all
@@ -39,13 +36,9 @@ repos:
         types: [rust]
         pass_filenames: false
 
-      # ── Slow gates (push only) ─────────────────────────────────────
-      # Run on `git push`. Full test suite.
-
       - id: cargo-test
         name: cargo test
         entry: cargo test --workspace
         language: system
         types: [rust]
         pass_filenames: false
-        stages: [pre-push]

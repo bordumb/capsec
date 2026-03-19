@@ -8,12 +8,17 @@ description = "Compile-time capability-based security for Rust"
 keywords = ["security", "capability", "type-system", "least-privilege"]
 categories = ["development-tools", "rust-patterns"]
 
+[features]
+tokio = ["dep:capsec-tokio", "capsec-tokio/full"]
+
 [dependencies]
 capsec-core.workspace = true
 capsec-macro.workspace = true
 capsec-std.workspace = true
+capsec-tokio = { workspace = true, optional = true }
 
 [dev-dependencies]
 trybuild.workspace = true
 capsec-core.workspace = true
-tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+capsec-tokio = { workspace = true, features = ["full"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "net", "process", "io-util"] }
