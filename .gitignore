@@ -10,3 +10,4 @@ docs/plans/
 
 # Example output artifacts
 synced.json
+crates/cargo-capsec/bench/results/

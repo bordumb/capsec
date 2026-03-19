@@ -1,0 +1,327 @@
+# Target crates for audit benchmarking.
+#
+# Categories:
+#   pure-library  — should have zero or near-zero findings
+#   io-library    — library with known I/O surface
+#   cli-app       — binary crate, expected FS/PROC/ENV findings
+#   web           — server/framework, expected NET-heavy findings
+#   async-runtime — runtime internals, expected NET/FS/FFI findings
+#   crypto        — should be pure or near-pure
+#   data          — serialization/parsing, should be minimal
+#
+# The "expect" field is a human hint for signal quality review,
+# not used programmatically.
+
+# ── Pure libraries ──────────────────────────────────────────────
+
+[[crate]]
+name = "serde"
+repo = "https://github.com/serde-rs/serde"
+category = "pure-library"
+expect = "minimal — serialization framework, no direct I/O"
+
+[[crate]]
+name = "regex"
+repo = "https://github.com/rust-lang/regex"
+category = "pure-library"
+expect = "minimal — pattern matching, no I/O"
+
+[[crate]]
+name = "rand"
+repo = "https://github.com/rust-random/rand"
+category = "pure-library"
+expect = "minimal — may read /dev/urandom via getrandom"
+
+[[crate]]
+name = "syn"
+repo = "https://github.com/dtolnay/syn"
+category = "pure-library"
+expect = "minimal — Rust parser, no I/O in lib"
+
+[[crate]]
+name = "clap"
+repo = "https://github.com/clap-rs/clap"
+category = "pure-library"
+expect = "minimal — CLI argument parser, env var reads in build.rs"
+
+[[crate]]
+name = "itertools"
+repo = "https://github.com/rust-itertools/itertools"
+category = "pure-library"
+expect = "zero — pure iterator combinators"
+
+[[crate]]
+name = "thiserror"
+repo = "https://github.com/dtolnay/thiserror"
+category = "pure-library"
+expect = "zero — derive macro for Error trait"
+
+[[crate]]
+name = "anyhow"
+repo = "https://github.com/dtolnay/anyhow"
+category = "pure-library"
+expect = "zero — error handling, no I/O"
+
+[[crate]]
+name = "bytes"
+repo = "https://github.com/tokio-rs/bytes"
+category = "pure-library"
+expect = "zero — byte buffer utilities"
+
+[[crate]]
+name = "rayon"
+repo = "https://github.com/rayon-rs/rayon"
+category = "pure-library"
+expect = "minimal — parallelism library, may use env vars for thread count"
+
+[[crate]]
+name = "nom"
+repo = "https://github.com/rust-bakery/nom"
+category = "pure-library"
+expect = "zero — parser combinators"
+
+[[crate]]
+name = "pest"
+repo = "https://github.com/pest-parser/pest"
+category = "pure-library"
+expect = "minimal — PEG parser, may read files in build"
+
+[[crate]]
+name = "crossbeam"
+repo = "https://github.com/crossbeam-rs/crossbeam"
+category = "pure-library"
+expect = "zero — concurrency primitives"
+
+[[crate]]
+name = "dashmap"
+repo = "https://github.com/xacrimon/dashmap"
+category = "pure-library"
+expect = "zero — concurrent hash map"
+
+[[crate]]
+name = "smallvec"
+repo = "https://github.com/servo/rust-smallvec"
+category = "pure-library"
+expect = "zero — stack-allocated vector"
+
+[[crate]]
+name = "bitflags"
+repo = "https://github.com/bitflags/bitflags"
+category = "pure-library"
+expect = "zero — bitflag macro"
+
+[[crate]]
+name = "unicode-segmentation"
+repo = "https://github.com/unicode-rs/unicode-segmentation"
+category = "pure-library"
+expect = "zero — Unicode text segmentation"
+
+# ── Crypto ──────────────────────────────────────────────────────
+
+[[crate]]
+name = "ring"
+repo = "https://github.com/briansmith/ring"
+category = "crypto"
+expect = "ffi — C/asm crypto primitives via extern blocks"
+
+[[crate]]
+name = "rustls"
+repo = "https://github.com/rustls/rustls"
+category = "crypto"
+expect = "minimal — TLS library, I/O in examples/tests only"
+
+[[crate]]
+name = "sha2"
+repo = "https://github.com/RustCrypto/hashes"
+category = "crypto"
+expect = "zero — pure hash computation"
+
+# ── Data / serialization ────────────────────────────────────────
+
+[[crate]]
+name = "serde_json"
+repo = "https://github.com/serde-rs/json"
+category = "data"
+expect = "minimal — JSON parser, I/O only in optional features"
+
+[[crate]]
+name = "toml"
+repo = "https://github.com/toml-rs/toml"
+category = "data"
+expect = "zero — TOML parser, no I/O"
+
+[[crate]]
+name = "csv"
+repo = "https://github.com/BurntSushi/rust-csv"
+category = "data"
+expect = "minimal — CSV parser, may use fs in examples"
+
+[[crate]]
+name = "image"
+repo = "https://github.com/image-rs/image"
+category = "data"
+expect = "fs — reads/writes image files"
+
+# ── CLI apps ────────────────────────────────────────────────────
+
+[[crate]]
+name = "ripgrep"
+repo = "https://github.com/BurntSushi/ripgrep"
+category = "cli-app"
+expect = "fs-heavy — file search tool"
+
+[[crate]]
+name = "bat"
+repo = "https://github.com/sharkdp/bat"
+category = "cli-app"
+expect = "fs-heavy — file viewer with syntax highlighting"
+
+[[crate]]
+name = "fd"
+repo = "https://github.com/sharkdp/fd"
+category = "cli-app"
+expect = "fs-heavy — file finder"
+
+[[crate]]
+name = "just"
+repo = "https://github.com/casey/just"
+category = "cli-app"
+expect = "fs + proc — command runner"
+
+[[crate]]
+name = "exa"
+repo = "https://github.com/ogham/exa"
+category = "cli-app"
+expect = "fs-heavy — ls replacement"
+
+[[crate]]
+name = "dust"
+repo = "https://github.com/bootandy/dust"
+category = "cli-app"
+expect = "fs-heavy — disk usage tool"
+
+[[crate]]
+name = "hyperfine"
+repo = "https://github.com/sharkdp/hyperfine"
+category = "cli-app"
+expect = "proc-heavy — benchmarking tool that spawns processes"
+
+[[crate]]
+name = "procs"
+repo = "https://github.com/dalance/procs"
+category = "cli-app"
+expect = "fs + proc — process viewer"
+
+[[crate]]
+name = "tokei"
+repo = "https://github.com/XAMPPRocky/tokei"
+category = "cli-app"
+expect = "fs-heavy — code statistics tool"
+
+[[crate]]
+name = "zoxide"
+repo = "https://github.com/ajeetdsouza/zoxide"
+category = "cli-app"
+expect = "fs + env — directory jumper"
+
+[[crate]]
+name = "starship"
+repo = "https://github.com/starship/starship"
+category = "cli-app"
+expect = "fs + env + proc — shell prompt, reads env, spawns git"
+
+[[crate]]
+name = "delta"
+repo = "https://github.com/dandavison/delta"
+category = "cli-app"
+expect = "fs + proc — git diff viewer"
+
+[[crate]]
+name = "bottom"
+repo = "https://github.com/ClementTsang/bottom"
+category = "cli-app"
+expect = "fs-heavy — system monitor"
+
+[[crate]]
+name = "nushell"
+repo = "https://github.com/nushell/nushell"
+category = "cli-app"
+expect = "everything — full shell, FS/NET/ENV/PROC"
+
+# ── Web / networking ────────────────────────────────────────────
+
+[[crate]]
+name = "axum"
+repo = "https://github.com/tokio-rs/axum"
+category = "web"
+expect = "net-heavy — web framework"
+
+[[crate]]
+name = "actix-web"
+repo = "https://github.com/actix/actix-web"
+category = "web"
+expect = "net-heavy — web framework"
+
+[[crate]]
+name = "reqwest"
+repo = "https://github.com/seanmonstar/reqwest"
+category = "web"
+expect = "net-heavy — HTTP client"
+
+[[crate]]
+name = "hyper"
+repo = "https://github.com/hyperium/hyper"
+category = "web"
+expect = "net — HTTP implementation"
+
+[[crate]]
+name = "warp"
+repo = "https://github.com/seanmonstar/warp"
+category = "web"
+expect = "net-heavy — web framework"
+
+# ── Async runtimes ──────────────────────────────────────────────
+
+[[crate]]
+name = "tokio"
+repo = "https://github.com/tokio-rs/tokio"
+category = "async-runtime"
+expect = "everything — async runtime, FS/NET/PROC/ENV"
+
+[[crate]]
+name = "async-std"
+repo = "https://github.com/async-rs/async-std"
+category = "async-runtime"
+expect = "everything — async runtime, mirrors std"
+
+# ── I/O libraries ──────────────────────────────────────────────
+
+[[crate]]
+name = "tracing"
+repo = "https://github.com/tokio-rs/tracing"
+category = "io-library"
+expect = "minimal — logging framework, env var for filter config"
+
+[[crate]]
+name = "notify"
+repo = "https://github.com/notify-rs/notify"
+category = "io-library"
+expect = "fs — filesystem watcher"
+
+[[crate]]
+name = "walkdir"
+repo = "https://github.com/BurntSushi/walkdir"
+category = "io-library"
+expect = "fs — directory traversal"
+
+[[crate]]
+name = "tempfile"
+repo = "https://github.com/Stebalien/tempfile"
+category = "io-library"
+expect = "fs — temporary file/dir creation"
+
+[[crate]]
+name = "rusqlite"
+repo = "https://github.com/rusqlite/rusqlite"
+category = "io-library"
+expect = "fs + ffi — SQLite bindings"
