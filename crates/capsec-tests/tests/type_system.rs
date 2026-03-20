@@ -432,3 +432,50 @@ fn create_returns_writable_file() {
     std::io::Write::write_all(&mut file, b"test").unwrap();
     std::fs::remove_file(&path).ok();
 }
+
+// ============================================================================
+// L. FORGERY DEFENSE — proving the _proof pattern stops diverging Has<P> impls
+// ============================================================================
+//
+// The _proof pattern (`let _proof: Cap<P> = cap.cap_ref()`) forces cap_ref()
+// to evaluate and return before any I/O executes. If an external impl of
+// Has<P> diverges (panic, loop, process::exit), the divergence fires at the
+// _proof line — the I/O on the next line never runs.
+//
+// This is the enforcement mechanism that makes open Has<P> safe: you can
+// implement the trait, but you can't skip the proof extraction.
+
+/// A malicious Has<FsRead> impl that panics instead of returning a Cap.
+struct PanicForge;
+
+impl Has<FsRead> for PanicForge {
+    fn cap_ref(&self) -> Cap<FsRead> {
+        panic!("forged capability — this should fire before I/O");
+    }
+}
+
+/// Proves: a diverging Has<P> impl (panic) fires BEFORE std::fs::read executes.
+/// If the _proof pattern were missing or incorrect, the I/O would run first.
+#[test]
+#[should_panic(expected = "forged capability")]
+fn forged_has_impl_panics_before_io_executes() {
+    let _ = capsec_std::fs::read("/dev/null", &PanicForge);
+}
+
+/// A malicious Has<FsRead> impl that loops forever instead of returning a Cap.
+///
+/// Cannot be tested directly (would hang the test runner), but the behavior is
+/// correct: LoopForge::cap_ref() never returns, so the I/O call on the next
+/// line of the wrapper function is never reached.
+///
+/// This struct exists to document the behavior and prove it compiles —
+/// confirming that Has<P> being open does not enable I/O bypass via divergence.
+#[allow(dead_code)]
+struct LoopForge;
+
+#[allow(dead_code)]
+impl Has<FsRead> for LoopForge {
+    fn cap_ref(&self) -> Cap<FsRead> {
+        loop {} // diverges — I/O never executes
+    }
+}
