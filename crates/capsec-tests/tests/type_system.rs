@@ -462,6 +462,81 @@ fn forged_has_impl_panics_before_io_executes() {
     let _ = capsec_std::fs::read("/dev/null", &PanicForge);
 }
 
+// ============================================================================
+// M. RUNTIME CAPS
+// ============================================================================
+
+#[test]
+fn runtime_cap_try_cap_returns_valid_cap_for_capsec_std() {
+    use capsec_core::runtime::RuntimeCap;
+
+    let root = test_root();
+    let cap = root.grant::<FsRead>();
+    let (rcap, _revoker) = RuntimeCap::new(cap);
+
+    let cap = rcap.try_cap().expect("should be active");
+    let result = capsec_std::fs::read("/dev/null", &cap);
+    assert!(
+        result.is_ok(),
+        "try_cap() → Cap<P> should work with capsec-std"
+    );
+}
+
+#[test]
+fn revoked_runtime_cap_prevents_io() {
+    use capsec_core::error::CapSecError;
+    use capsec_core::runtime::RuntimeCap;
+
+    let root = test_root();
+    let cap = root.grant::<FsRead>();
+    let (rcap, revoker) = RuntimeCap::new(cap);
+
+    revoker.revoke();
+    assert!(matches!(rcap.try_cap(), Err(CapSecError::Revoked)));
+}
+
+#[test]
+fn timed_cap_try_cap_returns_valid_cap() {
+    use capsec_core::runtime::TimedCap;
+    use std::time::Duration;
+
+    let root = test_root();
+    let cap = root.grant::<FsRead>();
+    let tcap = TimedCap::new(cap, Duration::from_secs(60));
+
+    let cap = tcap.try_cap().expect("should be active");
+    fn needs_fs(_: &impl Has<FsRead>) {}
+    needs_fs(&cap);
+}
+
+#[test]
+fn runtime_cap_with_tuple_permission() {
+    use capsec_core::runtime::RuntimeCap;
+
+    let root = test_root();
+    let cap = root.grant::<(FsRead, NetConnect)>();
+    let (rcap, _revoker) = RuntimeCap::new(cap);
+
+    let cap = rcap.try_cap().expect("should be active");
+    fn needs_fs(_: &impl Has<FsRead>) {}
+    fn needs_net(_: &impl Has<NetConnect>) {}
+    needs_fs(&cap);
+    needs_net(&cap);
+}
+
+#[test]
+fn runtime_cap_with_subsumption() {
+    use capsec_core::runtime::RuntimeCap;
+
+    let root = test_root();
+    let cap = root.grant::<FsAll>();
+    let (rcap, _revoker) = RuntimeCap::new(cap);
+
+    let cap = rcap.try_cap().expect("should be active");
+    fn needs_fs_read(_: &impl Has<FsRead>) {}
+    needs_fs_read(&cap); // FsAll subsumes FsRead
+}
+
 /// A malicious Has<FsRead> impl that loops forever instead of returning a Cap.
 ///
 /// Cannot be tested directly (would hang the test runner), but the behavior is
