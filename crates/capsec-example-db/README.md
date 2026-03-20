@@ -30,11 +30,21 @@ fn run_analytics(db: &CapDb, cap: &impl Has<DbRead>) {
 }
 ```
 
-## Running the example
+## Building and running
+
+This crate is **excluded from the default workspace** because it depends on `duckdb` with the `bundled` feature, which compiles the entire DuckDB C++ engine from source (~500k lines of C++). This keeps `cargo build --workspace`, `cargo test --workspace`, and `cargo clippy --workspace` fast for day-to-day development.
+
+To build, test, or run this crate, target it explicitly with `-p`:
 
 ```bash
+# Run the example
 cargo run -p capsec-example-db --example duck_db_app
+
+# Run the tests
+cargo test -p capsec-example-db
 ```
+
+The first build will be slow (DuckDB compilation). Subsequent builds use the cached artifacts and are fast.
 
 Output:
 
@@ -96,3 +106,5 @@ capsec prevents the code from exceeding its authority. auths prevents unauthoriz
 ```bash
 cargo test -p capsec-example-db
 ```
+
+> **Note:** This crate is in the workspace `exclude` list, not `members`. Use `-p capsec-example-db` explicitly — `--workspace` will not include it.
