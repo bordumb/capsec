@@ -21,4 +21,12 @@ pub enum CapSecError {
     /// An I/O error from the underlying `std` operation.
     #[error(transparent)]
     Io(#[from] std::io::Error),
+
+    /// The capability was revoked via its associated `Revoker`.
+    #[error("capability has been revoked")]
+    Revoked,
+
+    /// The capability has expired (TTL elapsed).
+    #[error("capability has expired")]
+    Expired,
 }

@@ -21,8 +21,8 @@ Requires:
 
 Publish order (dependency layers):
     Batch 1: capsec-core, capsec-macro          (no internal deps)
-    Batch 2: capsec-std                         (depends on capsec-core)
-    Batch 3: capsec                             (depends on core + macro + std)
+    Batch 2: capsec-std, capsec-tokio           (depends on capsec-core)
+    Batch 3: capsec                             (depends on core + macro + std + tokio)
     Batch 4: cargo-capsec                       (depends on core + std)
 """
 
@@ -39,7 +39,7 @@ CRATES_IO_API = "https://crates.io/api/v1/crates"
 
 PUBLISH_BATCHES: list[list[str]] = [
     ["capsec-core", "capsec-macro"],
-    ["capsec-std"],
+    ["capsec-std", "capsec-tokio"],
     ["capsec"],
     ["cargo-capsec"],
 ]
