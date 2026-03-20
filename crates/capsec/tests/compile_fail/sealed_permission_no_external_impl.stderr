@@ -1,37 +1,7 @@
-error[E0277]: the trait bound `MyPerm: capsec_core::permission::sealed::Sealed` is not satisfied
- --> tests/compile_fail/sealed_permission_no_external_impl.rs:6:21
+error[E0046]: not all trait items implemented, missing: `__CapsecSeal`
+ --> tests/compile_fail/sealed_permission_no_external_impl.rs:6:1
   |
 6 | impl Permission for MyPerm {}
-  |                     ^^^^^^ unsatisfied trait bound
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^ missing `__CapsecSeal` in implementation
   |
-help: the trait `capsec_core::permission::sealed::Sealed` is not implemented for `MyPerm`
- --> tests/compile_fail/sealed_permission_no_external_impl.rs:5:1
-  |
-5 | struct MyPerm;
-  | ^^^^^^^^^^^^^
-  = help: the following other types implement trait `capsec_core::permission::sealed::Sealed`:
-            (A, B)
-            Ambient
-            EnvRead
-            EnvWrite
-            FsAll
-            FsRead
-            FsWrite
-            NetAll
-          and $N others
-note: required by a bound in `capsec::Permission`
- --> $WORKSPACE/crates/capsec-core/src/permission.rs
-  |
-  | pub trait Permission: sealed::Sealed + 'static {}
-  |                       ^^^^^^^^^^^^^^ required by this bound in `Permission`
-  = note: `Permission` is a "sealed trait", because to implement it you also need to implement `capsec_core::permission::sealed::Sealed`, which is not accessible; this is usually done to force you to use one of the provided types that already implement it
-  = help: the following types implement the trait:
-            capsec::FsRead
-            capsec::FsWrite
-            capsec::FsAll
-            capsec::NetConnect
-            capsec::NetBind
-            capsec::NetAll
-            capsec::EnvRead
-            capsec::EnvWrite
-          and $N others
+  = help: implement the missing item: `type __CapsecSeal = /* Type */;`

@@ -6,7 +6,7 @@
 //! This crate provides the foundational types that the rest of the `capsec`
 //! ecosystem builds on:
 //!
-//! - [`Permission`](permission::Permission) — sealed marker trait for capability categories
+//! - [`Permission`](permission::Permission) — marker trait for capability categories
 //! - [`Cap<P>`](cap::Cap) — zero-sized proof token that the holder has permission `P`
 //! - [`Has<P>`](has::Has) — trait for checking and composing capabilities
 //! - [`CapRoot`](root::CapRoot) — the singleton root of all capability grants
@@ -45,3 +45,8 @@ pub mod error;
 pub mod has;
 pub mod permission;
 pub mod root;
+
+/// Re-export of the seal token module for use by `#[capsec::permission]` macro.
+/// Do not use directly.
+#[doc(hidden)]
+pub use permission::__private;

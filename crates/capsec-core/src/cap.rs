@@ -45,6 +45,24 @@ impl<P: Permission> Cap<P> {
         }
     }
 
+    /// Creates a new capability token for use by `#[capsec::permission]` generated code.
+    ///
+    /// This constructor is public so that derive macros can create `Cap<P>` for
+    /// user-defined permission types from external crates. The `SealProof` bound
+    /// ensures only types with a valid seal token can use this.
+    ///
+    /// Do not call directly — use `#[capsec::permission]` instead.
+    #[doc(hidden)]
+    pub fn __capsec_new_derived() -> Self
+    where
+        P: Permission<__CapsecSeal = crate::__private::SealProof>,
+    {
+        Self {
+            _phantom: PhantomData,
+            _not_send: PhantomData,
+        }
+    }
+
     /// Converts this capability into a [`SendCap`] that can cross thread boundaries.
     ///
     /// This is an explicit opt-in — you're acknowledging that this capability
@@ -91,6 +109,19 @@ unsafe impl<P: Permission> Send for SendCap<P> {}
 unsafe impl<P: Permission> Sync for SendCap<P> {}
 
 impl<P: Permission> SendCap<P> {
+    /// Creates a new send-capable token for use by `#[capsec::permission]` generated code.
+    ///
+    /// Do not call directly — use `#[capsec::permission]` instead.
+    #[doc(hidden)]
+    pub fn __capsec_new_send_derived() -> Self
+    where
+        P: Permission<__CapsecSeal = crate::__private::SealProof>,
+    {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+
     /// Returns a new `Cap<P>` from this send-capable token.
     ///
     /// This creates a fresh `Cap` (not a reference cast) — safe because

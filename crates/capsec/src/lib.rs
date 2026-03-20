@@ -54,7 +54,7 @@ pub fn run<T>(f: impl FnOnce(CapRoot) -> T) -> T {
 
 //  Re-exports from capsec-macro
 
-pub use capsec_macro::{context, deny, main, requires};
+pub use capsec_macro::{context, deny, main, permission, requires};
 
 //  Capability-gated std wrappers
 

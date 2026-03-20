@@ -33,6 +33,167 @@ const KNOWN_PERMISSIONS: &[&str] = &[
     "Ambient",
 ];
 
+/// Defines a user-defined permission type for capability-based security.
+///
+/// Generates the `Permission` trait impl (with seal token), `Has<P>` impls for
+/// `Cap<P>` and `SendCap<P>`, and optionally `Subsumes` impls for permission hierarchies.
+///
+/// # Usage
+///
+/// ```rust,ignore
+/// #[capsec::permission]
+/// pub struct DbRead;
+///
+/// #[capsec::permission]
+/// pub struct DbWrite;
+///
+/// #[capsec::permission(subsumes = [DbRead, DbWrite])]
+/// pub struct DbAll;
+/// ```
+///
+/// # What it generates
+///
+/// For `#[capsec::permission] pub struct DbRead;`:
+/// - `impl Permission for DbRead` with the seal token
+/// - `impl Has<DbRead> for Cap<DbRead>`
+/// - `impl Has<DbRead> for SendCap<DbRead>`
+///
+/// For `#[capsec::permission(subsumes = [DbRead, DbWrite])] pub struct DbAll;`:
+/// - All of the above, plus:
+/// - `impl Subsumes<DbRead> for DbAll`
+/// - `impl Has<DbRead> for Cap<DbAll>` and `SendCap<DbAll>`
+/// - Same for `DbWrite`
+#[proc_macro_attribute]
+pub fn permission(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let attr2: proc_macro2::TokenStream = attr.into();
+    let input = parse_macro_input!(item as ItemStruct);
+
+    match permission_inner(attr2, &input) {
+        Ok(tokens) => tokens.into(),
+        Err(e) => e.into_compile_error().into(),
+    }
+}
+
+fn permission_inner(
+    attr: proc_macro2::TokenStream,
+    input: &ItemStruct,
+) -> syn::Result<proc_macro2::TokenStream> {
+    // Validate: must be a unit struct (no fields)
+    match &input.fields {
+        syn::Fields::Unit => {}
+        _ => {
+            return Err(syn::Error::new_spanned(
+                input,
+                "#[capsec::permission] requires a unit struct (no fields)",
+            ));
+        }
+    }
+
+    // Reject generics
+    if !input.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &input.generics,
+            "#[capsec::permission] does not support generic structs",
+        ));
+    }
+
+    let struct_name = &input.ident;
+    let struct_vis = &input.vis;
+    let struct_attrs = &input.attrs;
+
+    // Parse subsumes = [...] from attribute
+    let subsumes = parse_subsumes(attr)?;
+
+    // Generate Permission impl with seal token
+    let permission_impl = quote! {
+        impl capsec_core::permission::Permission for #struct_name {
+            type __CapsecSeal = capsec_core::__private::SealProof;
+        }
+    };
+
+    // Note: Has<Self> for Cap<Self> and SendCap<Self> are already covered by
+    // the blanket impls in capsec_core::has:
+    //   impl<P: Permission> Has<P> for Cap<P>
+    //   impl<P: Permission> Has<P> for SendCap<P>
+    // So we only need to generate Subsumes-related Has impls.
+
+    // Generate Subsumes impls + Has<Sub> for Cap<Self>/SendCap<Self>
+    let subsumes_impls: Vec<_> = subsumes
+        .iter()
+        .map(|sub| {
+            quote! {
+                impl capsec_core::permission::Subsumes<#sub> for #struct_name {}
+
+                impl capsec_core::has::Has<#sub> for capsec_core::cap::Cap<#struct_name> {
+                    fn cap_ref(&self) -> capsec_core::cap::Cap<#sub> {
+                        capsec_core::cap::Cap::__capsec_new_derived()
+                    }
+                }
+
+                impl capsec_core::has::Has<#sub> for capsec_core::cap::SendCap<#struct_name> {
+                    fn cap_ref(&self) -> capsec_core::cap::Cap<#sub> {
+                        capsec_core::cap::Cap::__capsec_new_derived()
+                    }
+                }
+            }
+        })
+        .collect();
+
+    Ok(quote! {
+        #(#struct_attrs)*
+        #struct_vis struct #struct_name;
+
+        #permission_impl
+        #(#subsumes_impls)*
+    })
+}
+
+/// Parses `subsumes = [A, B, C]` from macro attribute tokens.
+fn parse_subsumes(attr: proc_macro2::TokenStream) -> syn::Result<Vec<syn::Path>> {
+    if attr.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    // Parse as Meta::NameValue: subsumes = [...]
+    let meta: Meta = syn::parse2(attr)?;
+    match &meta {
+        Meta::NameValue(nv) if nv.path.is_ident("subsumes") => {
+            // The value should be an array expression: [A, B, C]
+            if let syn::Expr::Array(arr) = &nv.value {
+                let mut paths = Vec::new();
+                let mut seen = std::collections::HashSet::new();
+                for elem in &arr.elems {
+                    if let syn::Expr::Path(ep) = elem {
+                        let path_str = quote::quote!(#ep).to_string();
+                        if !seen.insert(path_str.clone()) {
+                            return Err(syn::Error::new_spanned(
+                                elem,
+                                format!("duplicate subsumes entry: {}", path_str),
+                            ));
+                        }
+                        paths.push(ep.path.clone());
+                    } else {
+                        return Err(syn::Error::new_spanned(
+                            elem,
+                            "expected a permission type path in subsumes list",
+                        ));
+                    }
+                }
+                Ok(paths)
+            } else {
+                Err(syn::Error::new_spanned(
+                    &nv.value,
+                    "expected an array [A, B, C] for subsumes",
+                ))
+            }
+        }
+        _ => Err(syn::Error::new_spanned(
+            &meta,
+            "expected `subsumes = [...]`",
+        )),
+    }
+}
+
 /// Declares the capability requirements of a function.
 ///
 /// When all parameters use `impl Has<P>` bounds, the compiler already enforces
@@ -465,7 +626,8 @@ fn context_inner(
     };
 
     // Validate fields and collect permission info
-    let mut field_infos: Vec<(syn::Ident, syn::Ident)> = Vec::new(); // (field_name, perm_ident)
+    // Each entry: (field_name, resolved_perm_type_tokens)
+    let mut field_infos: Vec<(syn::Ident, proc_macro2::TokenStream)> = Vec::new();
     let mut seen_perms: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for field in &fields.named {
@@ -480,21 +642,23 @@ fn context_inner(
             ));
         }
 
-        // Extract type ident (last segment of path)
-        let perm_ident = match ty {
+        // Extract type path
+        let (perm_key, perm_tokens) = match ty {
             Type::Path(tp) => {
                 if let Some(seg) = tp.path.segments.last() {
-                    seg.ident.clone()
+                    let ident_str = seg.ident.to_string();
+                    // Known built-in? Qualify with capsec_core::permission::
+                    if KNOWN_PERMISSIONS.contains(&ident_str.as_str()) {
+                        let ident = &seg.ident;
+                        (ident_str, quote! { capsec_core::permission::#ident })
+                    } else {
+                        // Custom permission — pass through original type path
+                        (ident_str, quote! { #tp })
+                    }
                 } else {
                     return Err(syn::Error::new_spanned(
                         ty,
-                        format!(
-                            "field '{}' has type '{}', which is not a capsec permission type. \
-                             Expected one of: {}",
-                            field_name,
-                            quote!(#ty),
-                            KNOWN_PERMISSIONS.join(", ")
-                        ),
+                        format!("field '{}' has an empty type path", field_name,),
                     ));
                 }
             }
@@ -502,44 +666,26 @@ fn context_inner(
                 return Err(syn::Error::new_spanned(
                     ty,
                     format!(
-                        "field '{}' has type '{}', which is not a capsec permission type. \
-                         Expected one of: {}",
+                        "field '{}' has type '{}', which is not a valid permission type",
                         field_name,
                         quote!(#ty),
-                        KNOWN_PERMISSIONS.join(", ")
                     ),
                 ));
             }
         };
 
-        let perm_str = perm_ident.to_string();
-
-        // Validate against known permissions
-        if !KNOWN_PERMISSIONS.contains(&perm_str.as_str()) {
-            return Err(syn::Error::new_spanned(
-                ty,
-                format!(
-                    "field '{}' has type '{}', which is not a capsec permission type. \
-                     Expected one of: {}",
-                    field_name,
-                    perm_str,
-                    KNOWN_PERMISSIONS.join(", ")
-                ),
-            ));
-        }
-
         // Check for duplicates
-        if !seen_perms.insert(perm_str.clone()) {
+        if !seen_perms.insert(perm_key.clone()) {
             return Err(syn::Error::new_spanned(
                 ty,
                 format!(
                     "duplicate permission type '{}' — each permission can only appear once in a context struct",
-                    perm_str
+                    perm_key
                 ),
             ));
         }
 
-        field_infos.push((field_name, perm_ident));
+        field_infos.push((field_name, perm_tokens));
     }
 
     let struct_name = &input.ident;
@@ -551,9 +697,9 @@ fn context_inner(
         .iter()
         .map(|(name, perm)| {
             if is_send {
-                quote! { #name: capsec_core::cap::SendCap<capsec_core::permission::#perm> }
+                quote! { #name: capsec_core::cap::SendCap<#perm> }
             } else {
-                quote! { #name: capsec_core::cap::Cap<capsec_core::permission::#perm> }
+                quote! { #name: capsec_core::cap::Cap<#perm> }
             }
         })
         .collect();
@@ -563,9 +709,9 @@ fn context_inner(
         .iter()
         .map(|(name, perm)| {
             if is_send {
-                quote! { #name: root.grant::<capsec_core::permission::#perm>().make_send() }
+                quote! { #name: root.grant::<#perm>().make_send() }
             } else {
-                quote! { #name: root.grant::<capsec_core::permission::#perm>() }
+                quote! { #name: root.grant::<#perm>() }
             }
         })
         .collect();
@@ -575,8 +721,8 @@ fn context_inner(
         .iter()
         .map(|(name, perm)| {
             quote! {
-                impl capsec_core::has::Has<capsec_core::permission::#perm> for #struct_name {
-                    fn cap_ref(&self) -> capsec_core::cap::Cap<capsec_core::permission::#perm> {
+                impl capsec_core::has::Has<#perm> for #struct_name {
+                    fn cap_ref(&self) -> capsec_core::cap::Cap<#perm> {
                         self.#name.cap_ref()
                     }
                 }

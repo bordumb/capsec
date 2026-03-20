@@ -1,13 +1,10 @@
-/// Attempt to implement the private Sealed trait from an external crate.
+/// Attempt to implement Permission directly without the derive macro.
 ///
-/// The `Permission` trait requires `sealed::Sealed`, which lives in a private
-/// module inside capsec-core. External crates cannot name it, so they cannot
-/// implement Permission for custom types.
-///
-/// This test proves that even if you try to reach into the sealed module
-/// path, the compiler rejects it.
+/// The `Permission` trait requires a `__CapsecSeal` associated type that
+/// satisfies `__private::SealToken`. Without the `#[capsec::permission]`
+/// macro, you must provide this type — but leaving it out means the impl
+/// is incomplete and the compiler rejects it.
 
-// Approach 1: try to implement Permission directly (requires Sealed)
 use capsec::prelude::*;
 
 struct EvilPerm;

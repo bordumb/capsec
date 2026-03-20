@@ -9,6 +9,9 @@ members = [
     "crates/capsec-tokio",
     "crates/capsec-tests",
 ]
+exclude = [
+    "crates/capsec-example-db",
+]
 
 [workspace.package]
 version = "0.1.0"

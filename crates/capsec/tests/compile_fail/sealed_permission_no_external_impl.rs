@@ -1,5 +1,5 @@
-/// The Permission trait is sealed — external crates cannot implement it.
-/// This prevents forgery of new permission types outside capsec-core.
+/// The Permission trait requires a seal token — external crates cannot
+/// implement it without the `#[capsec::permission]` derive macro.
 use capsec::prelude::*;
 
 struct MyPerm;

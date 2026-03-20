@@ -1,13 +1,91 @@
-error: field 'x' has type 'String', which is not a capsec permission type. Expected one of: FsRead, FsWrite, FsAll, NetConnect, NetBind, NetAll, EnvRead, EnvWrite, Spawn, Ambient
+error[E0277]: the trait bound `String: Permission` is not satisfied
+ --> tests/compile_fail/context_bad_field.rs:4:1
+  |
+4 | #[capsec::context]
+  | ^^^^^^^^^^^^^^^^^^ the trait `Permission` is not implemented for `String`
+  |
+  = help: the following other types implement trait `Permission`:
+            (A, B)
+            Ambient
+            EnvRead
+            EnvWrite
+            FsAll
+            FsRead
+            FsWrite
+            NetAll
+          and $N others
+note: required by a bound in `Cap`
+ --> $WORKSPACE/crates/capsec-core/src/cap.rs
+  |
+  | pub struct Cap<P: Permission> {
+  |                   ^^^^^^^^^^ required by this bound in `Cap`
+  = note: this error originates in the attribute macro `capsec::context` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `String: Permission` is not satisfied
+ --> tests/compile_fail/context_bad_field.rs:4:1
+  |
+4 | #[capsec::context]
+  | ^^^^^^^^^^^^^^^^^^ the trait `Permission` is not implemented for `String`
+  |
+  = help: the following other types implement trait `Permission`:
+            (A, B)
+            Ambient
+            EnvRead
+            EnvWrite
+            FsAll
+            FsRead
+            FsWrite
+            NetAll
+          and $N others
+note: required by a bound in `capsec::Has`
+ --> $WORKSPACE/crates/capsec-core/src/has.rs
+  |
+  | pub trait Has<P: Permission> {
+  |                  ^^^^^^^^^^ required by this bound in `Has`
+  = note: this error originates in the attribute macro `capsec::context` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `String: Permission` is not satisfied
  --> tests/compile_fail/context_bad_field.rs:6:8
   |
+4 | #[capsec::context]
+  | ------------------ required by a bound introduced by this call
+5 | struct Bad {
 6 |     x: String,
-  |        ^^^^^^
+  |        ^^^^^^ the trait `Permission` is not implemented for `String`
+  |
+  = help: the following other types implement trait `Permission`:
+            (A, B)
+            Ambient
+            EnvRead
+            EnvWrite
+            FsAll
+            FsRead
+            FsWrite
+            NetAll
+          and $N others
+note: required by a bound in `CapRoot::grant`
+ --> $WORKSPACE/crates/capsec-core/src/root.rs
+  |
+  |     pub fn grant<P: Permission>(&self) -> Cap<P> {
+  |                     ^^^^^^^^^^ required by this bound in `CapRoot::grant`
 
-warning: unused import: `capsec::prelude::*`
- --> tests/compile_fail/context_bad_field.rs:2:5
+error[E0599]: the method `cap_ref` exists for struct `Cap<String>`, but its trait bounds were not satisfied
+ --> tests/compile_fail/context_bad_field.rs:4:1
   |
-2 | use capsec::prelude::*;
-  |     ^^^^^^^^^^^^^^^^^^
+4 | #[capsec::context]
+  | ^^^^^^^^^^^^^^^^^^ method cannot be called on `Cap<String>` due to unsatisfied trait bounds
   |
-  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+ ::: $WORKSPACE/crates/capsec-core/src/cap.rs
+  |
+  | pub struct Cap<P: Permission> {
+  | ----------------------------- doesn't satisfy `Cap<String>: capsec::Has<String>`
+  |
+ ::: $RUST/alloc/src/string.rs
+  |
+  | pub struct String {
+  | ----------------- doesn't satisfy `String: Permission`
+  |
+  = note: the following trait bounds were not satisfied:
+          `String: Permission`
+          which is required by `Cap<String>: capsec::Has<String>`
+  = note: this error originates in the attribute macro `capsec::context` (in Nightly builds, run with -Z macro-backtrace for more info)

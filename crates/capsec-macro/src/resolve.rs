@@ -27,11 +27,11 @@ pub fn meta_to_permission_type(meta: &Meta) -> Result<TokenStream, syn::Error> {
         "env::write" | "EnvWrite" => Ok(quote! { capsec_core::permission::EnvWrite }),
         "spawn" | "Spawn" => Ok(quote! { capsec_core::permission::Spawn }),
         "all" | "Ambient" => Ok(quote! { capsec_core::permission::Ambient }),
-        _ => Err(syn::Error::new_spanned(
-            meta.path(),
-            format!(
-                "Unknown capsec permission: `{path_str}`. Expected one of: fs::read, fs::write, fs::all, net::connect, net::bind, net::all, env::read, env::write, spawn, all"
-            ),
-        )),
+        _ => {
+            // Pass through as-is — custom permission types are checked by the
+            // compiler via Permission trait bounds at the use site.
+            let path = &meta.path();
+            Ok(quote! { #path })
+        }
     }
 }

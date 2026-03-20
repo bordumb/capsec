@@ -1,0 +1,16 @@
+[package]
+name = "capsec-example-db"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Example: user-defined database permissions with capsec"
+publish = false
+
+[dependencies]
+capsec = { path = "../capsec" }
+capsec-core = { path = "../capsec-core" }
+duckdb = { version = "1", features = ["bundled"] }
+
+[dev-dependencies]
+capsec-core = { path = "../capsec-core" }

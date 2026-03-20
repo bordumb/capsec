@@ -1,8 +1,9 @@
-//! The sealed [`Permission`] trait and all built-in permission types.
+//! The [`Permission`] trait and all built-in permission types.
 //!
 //! Permissions are zero-sized marker types that encode what kind of I/O a
-//! capability token grants. They form a sealed hierarchy — external crates
-//! cannot define new permissions, ensuring the set is auditable.
+//! capability token grants. Built-in permissions cover filesystem, network,
+//! environment, and process operations. Library authors can define custom
+//! permissions using `#[capsec::permission]`.
 //!
 //! # Built-in permissions
 //!
@@ -19,6 +20,18 @@
 //! | [`Spawn`] | Process | Execute subprocesses |
 //! | [`Ambient`] | Everything | Full ambient authority — the "god token" |
 //!
+//! # Custom permissions
+//!
+//! Use `#[capsec::permission]` to define domain-specific permissions:
+//!
+//! ```rust,ignore
+//! #[capsec::permission]
+//! pub struct DbRead;
+//!
+//! #[capsec::permission(subsumes = [DbRead])]
+//! pub struct DbAll;
+//! ```
+//!
 //! # Tuples
 //!
 //! Two permissions can be bundled via a tuple: `(FsRead, NetConnect)` is itself
@@ -32,12 +45,23 @@
 //! meaning a `Cap<FsAll>` can be used anywhere a `Cap<FsRead>` is required.
 //! [`Ambient`] subsumes everything.
 
-/// Marker trait for all capability permissions. Sealed to prevent external implementation.
+/// Marker trait for all capability permissions.
 ///
 /// Every permission type is a zero-sized struct that implements this trait.
-/// The sealed pattern ensures that only the permissions defined in this crate
-/// can be used as capability tokens — external crates cannot forge new permissions.
-pub trait Permission: sealed::Sealed + 'static {}
+/// Built-in permissions are defined in this module. Custom permissions can be
+/// defined using the `#[capsec::permission]` derive macro, which generates the
+/// required seal token.
+///
+/// # Direct implementation
+///
+/// Do not implement this trait manually. Use `#[capsec::permission]` instead.
+/// The `__CapsecSeal` associated type is `#[doc(hidden)]` and may change
+/// without notice.
+pub trait Permission: 'static {
+    /// Seal token preventing manual implementation. Do not use directly.
+    #[doc(hidden)]
+    type __CapsecSeal: __private::SealToken;
+}
 
 //  Filesystem
 
@@ -84,20 +108,42 @@ pub struct Ambient;
 
 //  Permission impls
 
-impl Permission for FsRead {}
-impl Permission for FsWrite {}
-impl Permission for FsAll {}
-impl Permission for NetConnect {}
-impl Permission for NetBind {}
-impl Permission for NetAll {}
-impl Permission for EnvRead {}
-impl Permission for EnvWrite {}
-impl Permission for Spawn {}
-impl Permission for Ambient {}
+impl Permission for FsRead {
+    type __CapsecSeal = __private::SealProof;
+}
+impl Permission for FsWrite {
+    type __CapsecSeal = __private::SealProof;
+}
+impl Permission for FsAll {
+    type __CapsecSeal = __private::SealProof;
+}
+impl Permission for NetConnect {
+    type __CapsecSeal = __private::SealProof;
+}
+impl Permission for NetBind {
+    type __CapsecSeal = __private::SealProof;
+}
+impl Permission for NetAll {
+    type __CapsecSeal = __private::SealProof;
+}
+impl Permission for EnvRead {
+    type __CapsecSeal = __private::SealProof;
+}
+impl Permission for EnvWrite {
+    type __CapsecSeal = __private::SealProof;
+}
+impl Permission for Spawn {
+    type __CapsecSeal = __private::SealProof;
+}
+impl Permission for Ambient {
+    type __CapsecSeal = __private::SealProof;
+}
 
 //  Tuple permissions
 
-impl<A: Permission, B: Permission> Permission for (A, B) {}
+impl<A: Permission, B: Permission> Permission for (A, B) {
+    type __CapsecSeal = __private::SealProof;
+}
 
 //  Subsumption
 
@@ -114,21 +160,19 @@ impl Subsumes<NetConnect> for NetAll {}
 impl Subsumes<NetBind> for NetAll {}
 impl<P: Permission> Subsumes<P> for Ambient {}
 
-//  Sealed
+//  Seal token — prevents manual Permission implementation.
+//  The #[capsec::permission] macro generates the correct seal.
+//  Users could write this by hand (it's #[doc(hidden)], not private),
+//  but that's equivalent to writing `unsafe` — they own the consequences.
 
-mod sealed {
-    pub trait Sealed {}
-    impl Sealed for super::FsRead {}
-    impl Sealed for super::FsWrite {}
-    impl Sealed for super::FsAll {}
-    impl Sealed for super::NetConnect {}
-    impl Sealed for super::NetBind {}
-    impl Sealed for super::NetAll {}
-    impl Sealed for super::EnvRead {}
-    impl Sealed for super::EnvWrite {}
-    impl Sealed for super::Spawn {}
-    impl Sealed for super::Ambient {}
-    impl<A: Sealed, B: Sealed> Sealed for (A, B) {}
+#[doc(hidden)]
+pub mod __private {
+    /// Proof token that a permission was registered via the capsec derive macro.
+    pub struct SealProof;
+
+    /// Trait bound for the seal associated type.
+    pub trait SealToken {}
+    impl SealToken for SealProof {}
 }
 
 #[cfg(test)]
