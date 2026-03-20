@@ -58,19 +58,14 @@ jobs:
     name: Capability Audit
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       security-events: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: "1.94.0"
-      - run: cargo build -p cargo-capsec
-      - run: cargo run -p cargo-capsec -- capsec audit --fail-on high --quiet
-      - name: Generate SARIF report
-        if: always()
-        run: cargo run -p cargo-capsec -- capsec audit --format sarif > capsec.sarif
-      - name: Upload SARIF to GitHub Code Scanning
-        if: always()
-        uses: github/codeql-action/upload-sarif@v3
+      - uses: bordumb/capsec-github-action@v1
         with:
-          sarif_file: capsec.sarif
+          fail-on: high
