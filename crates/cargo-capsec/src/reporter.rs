@@ -12,6 +12,7 @@ use crate::detector::Finding;
 use colored::Colorize;
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::path::Path;
 
 /// Prints findings to stdout as color-coded text grouped by crate.
 ///
@@ -278,7 +279,14 @@ fn finding_to_json(f: &Finding) -> JsonFinding {
 /// The output includes a `rules` array in `tool.driver` with descriptions and default
 /// severity for each rule, and each result carries a `ruleIndex` pointing into that array.
 /// This is required for GitHub Code Scanning to display rule metadata in the Security tab.
-pub fn report_sarif(findings: &[Finding]) -> String {
+///
+/// `workspace_root` is used to make `artifactLocation.uri` repo-relative. Paths that
+/// start with the workspace root have that prefix stripped; other paths are left as-is.
+///
+/// Each rule includes `properties.security-severity` (numeric, 0.0–10.0) for GitHub
+/// severity sorting, and each result includes `partialFingerprints.primaryLocationLineHash`
+/// for cross-run deduplication.
+pub fn report_sarif(findings: &[Finding], workspace_root: &Path) -> String {
     // Build deduplicated rules array. Each unique ruleId gets one entry.
     // Use BTreeMap for deterministic ordering.
     let mut rule_index_map: BTreeMap<String, usize> = BTreeMap::new();
@@ -301,6 +309,9 @@ pub fn report_sarif(findings: &[Finding]) -> String {
                 "defaultConfiguration": {
                     "level": risk_to_sarif_level(f.risk)
                 },
+                "properties": {
+                    "security-severity": risk_to_security_severity(f.risk)
+                },
                 "helpUri": "https://github.com/bordumb/capsec"
             }));
         }
@@ -315,6 +326,8 @@ pub fn report_sarif(findings: &[Finding]) -> String {
                 f.subcategory
             );
             let rule_index = rule_index_map[&rule_id];
+            let relative_path = make_relative(&f.file, workspace_root);
+            let fingerprint = compute_fingerprint(f);
             serde_json::json!({
                 "ruleId": rule_id,
                 "ruleIndex": rule_index,
@@ -324,13 +337,16 @@ pub fn report_sarif(findings: &[Finding]) -> String {
                 },
                 "locations": [{
                     "physicalLocation": {
-                        "artifactLocation": { "uri": f.file },
+                        "artifactLocation": { "uri": relative_path },
                         "region": {
                             "startLine": f.call_line,
                             "startColumn": f.call_col
                         }
                     }
-                }]
+                }],
+                "partialFingerprints": {
+                    "primaryLocationLineHash": fingerprint
+                }
             })
         })
         .collect();
@@ -354,6 +370,45 @@ pub fn report_sarif(findings: &[Finding]) -> String {
     serde_json::to_string_pretty(&sarif).unwrap_or_default()
 }
 
+/// Maps risk level to numeric security-severity (0.0–10.0) for GitHub Code Scanning.
+fn risk_to_security_severity(risk: Risk) -> f64 {
+    match risk {
+        Risk::Critical => 9.5,
+        Risk::High => 7.5,
+        Risk::Medium => 5.0,
+        Risk::Low => 2.0,
+    }
+}
+
+/// Strips `workspace_root` prefix from a file path to produce a repo-relative URI.
+fn make_relative(file_path: &str, workspace_root: &Path) -> String {
+    let root_str = workspace_root.to_string_lossy();
+    let root_prefix = if root_str.ends_with('/') {
+        root_str.to_string()
+    } else {
+        format!("{root_str}/")
+    };
+    if file_path.starts_with(&root_prefix) {
+        file_path[root_prefix.len()..].to_string()
+    } else {
+        file_path.to_string()
+    }
+}
+
+/// Computes a stable fingerprint for a finding, used by GitHub to deduplicate
+/// alerts across runs. Uses the same identity tuple as baseline diffing.
+fn compute_fingerprint(f: &Finding) -> String {
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
+    let mut hasher = DefaultHasher::new();
+    f.file.hash(&mut hasher);
+    f.function.hash(&mut hasher);
+    f.call_text.hash(&mut hasher);
+    f.category.label().hash(&mut hasher);
+    f.subcategory.hash(&mut hasher);
+    format!("{:016x}", hasher.finish())
+}
+
 fn risk_to_sarif_level(risk: Risk) -> &'static str {
     match risk {
         Risk::Critical => "error",
@@ -365,11 +420,16 @@ fn risk_to_sarif_level(risk: Risk) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::path::PathBuf;
+
+    fn test_root() -> PathBuf {
+        PathBuf::from("/workspace/project")
+    }
 
     fn sample_findings() -> Vec<Finding> {
         vec![
             Finding {
-                file: "src/main.rs".to_string(),
+                file: "/workspace/project/src/main.rs".to_string(),
                 function: "main".to_string(),
                 function_line: 5,
                 call_line: 8,
@@ -385,7 +445,7 @@ mod tests {
                 is_deny_violation: false,
             },
             Finding {
-                file: "src/net.rs".to_string(),
+                file: "/workspace/project/src/net.rs".to_string(),
                 function: "connect".to_string(),
                 function_line: 10,
                 call_line: 12,
@@ -415,7 +475,7 @@ mod tests {
     #[test]
     fn sarif_report_is_valid() {
         let findings = sample_findings();
-        let sarif_str = report_sarif(&findings);
+        let sarif_str = report_sarif(&findings, &test_root());
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         assert_eq!(parsed["version"], "2.1.0");
         assert_eq!(parsed["runs"][0]["results"].as_array().unwrap().len(), 2);
@@ -424,7 +484,7 @@ mod tests {
     #[test]
     fn sarif_has_rules_array() {
         let findings = sample_findings();
-        let sarif_str = report_sarif(&findings);
+        let sarif_str = report_sarif(&findings, &test_root());
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
 
         let driver = &parsed["runs"][0]["tool"]["driver"];
@@ -456,7 +516,7 @@ mod tests {
     #[test]
     fn sarif_results_have_valid_rule_index() {
         let findings = sample_findings();
-        let sarif_str = report_sarif(&findings);
+        let sarif_str = report_sarif(&findings, &test_root());
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
 
         let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
@@ -486,7 +546,7 @@ mod tests {
         // Two findings with the same category+subcategory should produce one rule
         let findings = vec![
             Finding {
-                file: "src/a.rs".to_string(),
+                file: "/workspace/project/src/a.rs".to_string(),
                 function: "a".to_string(),
                 function_line: 1,
                 call_line: 2,
@@ -502,7 +562,7 @@ mod tests {
                 is_deny_violation: false,
             },
             Finding {
-                file: "src/b.rs".to_string(),
+                file: "/workspace/project/src/b.rs".to_string(),
                 function: "b".to_string(),
                 function_line: 10,
                 call_line: 12,
@@ -519,7 +579,7 @@ mod tests {
             },
         ];
 
-        let sarif_str = report_sarif(&findings);
+        let sarif_str = report_sarif(&findings, &test_root());
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
             .as_array()
@@ -541,7 +601,7 @@ mod tests {
 
     #[test]
     fn sarif_empty_findings_has_empty_rules() {
-        let sarif_str = report_sarif(&[]);
+        let sarif_str = report_sarif(&[], &test_root());
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
             .as_array()
@@ -554,5 +614,128 @@ mod tests {
         let json_str = report_json(&[]);
         let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
         assert_eq!(parsed["summary"]["total_findings"], 0);
+    }
+
+    #[test]
+    fn sarif_results_have_partial_fingerprints() {
+        let findings = sample_findings();
+        let sarif_str = report_sarif(&findings, &test_root());
+        let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
+        let results = parsed["runs"][0]["results"].as_array().unwrap();
+
+        for result in results {
+            let fingerprint = result["partialFingerprints"]["primaryLocationLineHash"]
+                .as_str()
+                .expect("each result must have partialFingerprints.primaryLocationLineHash");
+            assert_eq!(fingerprint.len(), 16, "fingerprint should be 16 hex chars");
+            assert!(
+                fingerprint.chars().all(|c| c.is_ascii_hexdigit()),
+                "fingerprint should be hex"
+            );
+        }
+
+        // Two different findings should have different fingerprints
+        let fp0 = results[0]["partialFingerprints"]["primaryLocationLineHash"]
+            .as_str()
+            .unwrap();
+        let fp1 = results[1]["partialFingerprints"]["primaryLocationLineHash"]
+            .as_str()
+            .unwrap();
+        assert_ne!(
+            fp0, fp1,
+            "different findings should have different fingerprints"
+        );
+    }
+
+    #[test]
+    fn sarif_rules_have_security_severity() {
+        let findings = sample_findings();
+        let sarif_str = report_sarif(&findings, &test_root());
+        let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
+        let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
+            .as_array()
+            .unwrap();
+
+        for rule in rules {
+            let severity = rule["properties"]["security-severity"]
+                .as_f64()
+                .expect("each rule must have properties.security-severity as number");
+            assert!(
+                (0.0..=10.0).contains(&severity),
+                "security-severity must be 0.0-10.0, got {severity}"
+            );
+        }
+
+        // fs/read is Medium → 5.0, net/connect is High → 7.5
+        assert_eq!(rules[0]["properties"]["security-severity"], 5.0);
+        assert_eq!(rules[1]["properties"]["security-severity"], 7.5);
+    }
+
+    #[test]
+    fn sarif_artifact_uris_are_relative() {
+        let findings = sample_findings();
+        let sarif_str = report_sarif(&findings, &test_root());
+        let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
+        let results = parsed["runs"][0]["results"].as_array().unwrap();
+
+        for result in results {
+            let uri = result["locations"][0]["physicalLocation"]["artifactLocation"]["uri"]
+                .as_str()
+                .unwrap();
+            assert!(
+                !uri.starts_with('/'),
+                "artifactLocation.uri must be relative, got: {uri}"
+            );
+        }
+
+        assert_eq!(
+            results[0]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+            "src/main.rs"
+        );
+        assert_eq!(
+            results[1]["locations"][0]["physicalLocation"]["artifactLocation"]["uri"],
+            "src/net.rs"
+        );
+    }
+
+    #[test]
+    fn make_relative_strips_prefix() {
+        let root = PathBuf::from("/home/runner/work/repo");
+        assert_eq!(
+            make_relative("/home/runner/work/repo/src/main.rs", &root),
+            "src/main.rs"
+        );
+    }
+
+    #[test]
+    fn make_relative_preserves_non_matching_path() {
+        let root = PathBuf::from("/home/runner/work/repo");
+        assert_eq!(
+            make_relative("/other/path/src/main.rs", &root),
+            "/other/path/src/main.rs"
+        );
+    }
+
+    #[test]
+    fn fingerprint_is_stable() {
+        let f = Finding {
+            file: "src/main.rs".to_string(),
+            function: "main".to_string(),
+            function_line: 5,
+            call_line: 8,
+            call_col: 5,
+            call_text: "std::fs::read".to_string(),
+            category: Category::Fs,
+            subcategory: "read".to_string(),
+            risk: Risk::Medium,
+            description: "Read arbitrary file".to_string(),
+            is_build_script: false,
+            crate_name: "my-app".to_string(),
+            crate_version: "0.1.0".to_string(),
+            is_deny_violation: false,
+        };
+        let fp1 = compute_fingerprint(&f);
+        let fp2 = compute_fingerprint(&f);
+        assert_eq!(fp1, fp2, "fingerprint must be stable across calls");
     }
 }

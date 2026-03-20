@@ -61,14 +61,22 @@ def parse_crates_toml(path: Path) -> list[dict]:
 
 def get_capsec_version() -> str:
     """Get the installed cargo-capsec version."""
+    # Try --version first (most reliable)
+    result = subprocess.run(
+        ["cargo", "capsec", "--version"],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0 and result.stdout.strip():
+        return result.stdout.strip()
+    # Fall back to parsing help output
     result = subprocess.run(
         ["cargo", "capsec", "audit", "--help"],
         capture_output=True,
         text=True,
     )
-    # Try to extract from help output or just return unknown
     for line in result.stdout.splitlines():
-        if "version" in line.lower():
+        if "version" in line.lower() or "capsec" in line.lower():
             return line.strip()
     return "unknown"
 
@@ -97,6 +105,20 @@ def clone_repo(repo_url: str, dest: Path) -> bool:
     return True
 
 
+def strip_temp_paths(audit_data: dict | None, crate_dir: Path) -> dict | None:
+    """Strip absolute temp directory prefix from file paths in audit output."""
+    if not audit_data:
+        return audit_data
+    prefix = str(crate_dir)
+    if not prefix.endswith("/"):
+        prefix += "/"
+    for crate_entry in audit_data.get("crates", []):
+        for finding in crate_entry.get("findings", []):
+            if "file" in finding and finding["file"].startswith(prefix):
+                finding["file"] = finding["file"][len(prefix):]
+    return audit_data
+
+
 def run_audit(crate_dir: Path) -> dict:
     """Run cargo capsec audit on a directory. Returns parsed result."""
     start = time.monotonic()
@@ -117,7 +139,8 @@ def run_audit(crate_dir: Path) -> dict:
 
     if result.stdout.strip():
         try:
-            output["audit"] = json.loads(result.stdout)
+            audit = json.loads(result.stdout)
+            output["audit"] = strip_temp_paths(audit, crate_dir)
         except json.JSONDecodeError:
             output["audit"] = None
             output["parse_error"] = "Failed to parse JSON output"

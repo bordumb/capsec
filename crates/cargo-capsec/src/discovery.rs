@@ -28,6 +28,7 @@ pub struct CrateInfo {
 #[derive(Deserialize)]
 struct CargoMetadata {
     packages: Vec<Package>,
+    workspace_root: String,
 }
 
 #[derive(Deserialize)]
@@ -38,17 +39,27 @@ struct Package {
     source: Option<String>,
 }
 
+/// Result of workspace discovery: crates and the resolved workspace root.
+pub struct DiscoveryResult {
+    /// All discovered crates.
+    pub crates: Vec<CrateInfo>,
+    /// The Cargo workspace root (from `cargo metadata`).
+    pub workspace_root: PathBuf,
+}
+
 /// Discovers all crates in a Cargo workspace by running `cargo metadata`.
 ///
 /// When `include_deps` is `false` (default), passes `--no-deps` for speed — only
 /// workspace members and path dependencies appear. When `true`, all transitive
 /// dependencies with cached source are included.
+///
+/// Returns both the discovered crates and the resolved workspace root path.
 pub fn discover_crates(
     workspace_root: &Path,
     include_deps: bool,
     spawn_cap: &impl capsec_core::has::Has<capsec_core::permission::Spawn>,
     _fs_cap: &impl capsec_core::has::Has<capsec_core::permission::FsRead>,
-) -> Result<Vec<CrateInfo>, String> {
+) -> Result<DiscoveryResult, String> {
     // Use --no-deps by default for speed (avoids resolving 300+ transitive deps).
     // Drop it when --include-deps is set so path dependencies and registry crates appear.
     let mut args = vec!["metadata", "--format-version=1"];
@@ -70,6 +81,8 @@ pub fn discover_crates(
     let metadata: CargoMetadata = serde_json::from_slice(&output.stdout)
         .map_err(|e| format!("Failed to parse cargo metadata: {e}"))?;
 
+    let resolved_root = PathBuf::from(&metadata.workspace_root);
+
     let mut crates = Vec::new();
 
     for package in &metadata.packages {
@@ -90,7 +103,10 @@ pub fn discover_crates(
         }
     }
 
-    Ok(crates)
+    Ok(DiscoveryResult {
+        crates,
+        workspace_root: resolved_root,
+    })
 }
 
 /// Recursively discovers all `.rs` source files in a directory.

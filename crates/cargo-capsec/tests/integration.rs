@@ -170,7 +170,7 @@ fn sarif_output_is_valid() {
     let detector = Detector::new();
     let findings = detector.analyse(&parsed, "fs_crate", "0.1.0");
 
-    let sarif = cargo_capsec::reporter::report_sarif(&findings);
+    let sarif = cargo_capsec::reporter::report_sarif(&findings, std::path::Path::new("."));
     let parsed: serde_json::Value = serde_json::from_str(&sarif).unwrap();
     assert_eq!(parsed["version"], "2.1.0");
     assert!(!parsed["runs"][0]["results"].as_array().unwrap().is_empty());

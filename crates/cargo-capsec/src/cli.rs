@@ -13,7 +13,10 @@ use std::path::PathBuf;
         cargo capsec audit --format sarif     SARIF for GitHub Code Scanning\n  \
         cargo capsec audit --baseline         Save results as baseline\n  \
         cargo capsec audit --diff             Show changes since last baseline\n  \
-        cargo capsec audit --min-risk high    Only show high and critical findings"
+        cargo capsec audit --min-risk high    Only show high and critical findings\n  \
+        cargo capsec check-deny               Verify #[capsec::deny] annotations\n  \
+        cargo capsec badge                    Generate shields.io badge\n  \
+        cargo capsec badge --json             Output shields.io endpoint JSON"
 )]
 pub struct Cli {
     /// When invoked as `cargo capsec`, cargo passes "capsec" as the first arg.
@@ -36,6 +39,10 @@ pub enum CargoSubcommand {
 pub enum Commands {
     /// Scan for ambient authority usage
     Audit(AuditArgs),
+    /// Verify #[capsec::deny] annotations are respected
+    CheckDeny(CheckDenyArgs),
+    /// Generate a shields.io badge from audit results
+    Badge(BadgeArgs),
 }
 
 #[derive(clap::Args)]
@@ -79,4 +86,38 @@ pub struct AuditArgs {
     /// Suppress output (exit code only, for CI)
     #[arg(short, long)]
     pub quiet: bool,
+}
+
+#[derive(clap::Args)]
+pub struct CheckDenyArgs {
+    /// Path to workspace root
+    #[arg(short, long, default_value = ".")]
+    pub path: PathBuf,
+
+    /// Output format
+    #[arg(short, long, default_value = "text", value_parser = ["text", "json", "sarif"])]
+    pub format: String,
+
+    /// Only scan these crates (comma-separated)
+    #[arg(long)]
+    pub only: Option<String>,
+
+    /// Skip these crates (comma-separated)
+    #[arg(long)]
+    pub skip: Option<String>,
+}
+
+#[derive(clap::Args)]
+pub struct BadgeArgs {
+    /// Path to workspace root
+    #[arg(short, long, default_value = ".")]
+    pub path: PathBuf,
+
+    /// Output shields.io endpoint JSON instead of markdown
+    #[arg(long)]
+    pub json: bool,
+
+    /// Risk threshold for badge color (default: high)
+    #[arg(long, default_value = "high", value_parser = ["low", "medium", "high", "critical"])]
+    pub fail_on: String,
 }
