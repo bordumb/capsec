@@ -10,6 +10,7 @@ mod reporter;
 use authorities::Risk;
 use clap::Parser;
 use cli::{AuditArgs, BadgeArgs, CargoSubcommand, CheckDenyArgs, Cli, Commands};
+use std::path::Path;
 
 fn main() {
     let cli = Cli::parse();
@@ -99,6 +100,11 @@ fn run_audit(args: AuditArgs) {
                 }
             }
         }
+    }
+
+    // Normalize file paths to workspace-relative for portable baselines and output
+    for f in &mut all_findings {
+        f.file = make_relative(&f.file, &workspace_root);
     }
 
     // Filter by risk level
@@ -218,7 +224,12 @@ fn run_check_deny(args: CheckDenyArgs) {
             match parser::parse_file(&file_path, &fs_read) {
                 Ok(parsed) => {
                     let findings = det.analyse(&parsed, &krate.name, &krate.version);
-                    violations.extend(findings.into_iter().filter(|f| f.is_deny_violation));
+                    violations.extend(findings.into_iter().filter(|f| f.is_deny_violation).map(
+                        |mut f| {
+                            f.file = make_relative(&f.file, &workspace_root);
+                            f
+                        },
+                    ));
                 }
                 Err(e) => {
                     eprintln!("  Warning: {e}");
@@ -297,6 +308,7 @@ fn run_badge(args: BadgeArgs) {
             std::process::exit(2);
         }
     };
+    let workspace_root = discovery.workspace_root;
     let crates = discovery.crates;
 
     let mut det = detector::Detector::new();
@@ -320,7 +332,10 @@ fn run_badge(args: BadgeArgs) {
         }
     }
 
-    // Apply allow rules
+    // Normalize paths and apply allow rules
+    for f in &mut all_findings {
+        f.file = make_relative(&f.file, &workspace_root);
+    }
     all_findings.retain(|f| !config::should_allow(f, &cfg));
 
     // Determine badge color based on highest risk level
@@ -361,5 +376,19 @@ fn run_badge(args: BadgeArgs) {
         println!(
             "[![capsec](https://img.shields.io/badge/capsec-{encoded_message}-{color})](https://github.com/bordumb/capsec)"
         );
+    }
+}
+
+fn make_relative(file_path: &str, workspace_root: &Path) -> String {
+    let root_str = workspace_root.to_string_lossy();
+    let root_prefix = if root_str.ends_with('/') {
+        root_str.to_string()
+    } else {
+        format!("{root_str}/")
+    };
+    if file_path.starts_with(&root_prefix) {
+        file_path[root_prefix.len()..].to_string()
+    } else {
+        file_path.to_string()
     }
 }
