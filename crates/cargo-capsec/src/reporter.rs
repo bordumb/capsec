@@ -287,7 +287,7 @@ fn finding_to_json(f: &Finding) -> JsonFinding {
 /// - `$schema`: json.schemastore.org URL (GitHub canonical)
 /// - Rules: `shortDescription`, `fullDescription`, `help.text`, `properties.tags`,
 ///   `properties.security-severity` (string), `properties.precision`
-/// - Results: `region` with all four bounds, `partialFingerprints.primaryLocationLineHash`
+/// - Results: `region` with all four bounds, `partialFingerprints.capsecFindingHash/v1`
 /// - Run: `semanticVersion`, `runAutomationDetails.id`
 pub fn report_sarif(findings: &[Finding], workspace_root: &Path) -> String {
     let mut rule_index_map: BTreeMap<String, usize> = BTreeMap::new();
@@ -357,7 +357,7 @@ pub fn report_sarif(findings: &[Finding], workspace_root: &Path) -> String {
                     }
                 }],
                 "partialFingerprints": {
-                    "primaryLocationLineHash": fingerprint
+                    "capsecFindingHash/v1": fingerprint
                 }
             })
         })
@@ -422,7 +422,7 @@ fn risk_to_precision(risk: Risk) -> &'static str {
 }
 
 /// Computes a stable fingerprint for GitHub Code Scanning deduplication.
-/// Emitted as `partialFingerprints.primaryLocationLineHash`.
+/// Emitted as `partialFingerprints.capsecFindingHash/v1`.
 fn compute_fingerprint(f: &Finding) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
@@ -693,9 +693,9 @@ mod tests {
         let results = parsed["runs"][0]["results"].as_array().unwrap();
 
         for result in results {
-            let fingerprint = result["partialFingerprints"]["primaryLocationLineHash"]
+            let fingerprint = result["partialFingerprints"]["capsecFindingHash/v1"]
                 .as_str()
-                .expect("each result must have partialFingerprints.primaryLocationLineHash");
+                .expect("each result must have partialFingerprints.capsecFindingHash/v1");
             assert_eq!(fingerprint.len(), 16, "fingerprint should be 16 hex chars");
             assert!(
                 fingerprint.chars().all(|c| c.is_ascii_hexdigit()),
@@ -704,10 +704,10 @@ mod tests {
         }
 
         // Two different findings should have different fingerprints
-        let fp0 = results[0]["partialFingerprints"]["primaryLocationLineHash"]
+        let fp0 = results[0]["partialFingerprints"]["capsecFindingHash/v1"]
             .as_str()
             .unwrap();
-        let fp1 = results[1]["partialFingerprints"]["primaryLocationLineHash"]
+        let fp1 = results[1]["partialFingerprints"]["capsecFindingHash/v1"]
             .as_str()
             .unwrap();
         assert_ne!(
