@@ -283,12 +283,13 @@ fn finding_to_json(f: &Finding) -> JsonFinding {
 /// `workspace_root` is used to make `artifactLocation.uri` repo-relative. Paths that
 /// start with the workspace root have that prefix stripped; other paths are left as-is.
 ///
-/// Each rule includes `properties.security-severity` (numeric, 0.0–10.0) for GitHub
-/// severity sorting, and each result includes `partialFingerprints.primaryLocationLineHash`
-/// for cross-run deduplication.
+/// Validated against GitHub Code Scanning SARIF requirements:
+/// - `$schema`: json.schemastore.org URL (GitHub canonical)
+/// - Rules: `shortDescription`, `fullDescription`, `help.text`, `properties.tags`,
+///   `properties.security-severity` (string), `properties.precision`
+/// - Results: `region` with all four bounds, `partialFingerprints.primaryLocationLineHash`
+/// - Run: `semanticVersion`, `runAutomationDetails.id`
 pub fn report_sarif(findings: &[Finding], workspace_root: &Path) -> String {
-    // Build deduplicated rules array. Each unique ruleId gets one entry.
-    // Use BTreeMap for deterministic ordering.
     let mut rule_index_map: BTreeMap<String, usize> = BTreeMap::new();
     let mut rules: Vec<serde_json::Value> = Vec::new();
 
@@ -301,18 +302,27 @@ pub fn report_sarif(findings: &[Finding], workspace_root: &Path) -> String {
         if !rule_index_map.contains_key(&rule_id) {
             let idx = rules.len();
             rule_index_map.insert(rule_id.clone(), idx);
+            let category_tag = format!("ambient-authority/{}", f.category.label().to_lowercase());
             rules.push(serde_json::json!({
                 "id": rule_id,
                 "shortDescription": {
                     "text": f.description
                 },
+                "fullDescription": {
+                    "text": format!("{}. Detected by capsec static analysis.", f.description)
+                },
+                "help": {
+                    "text": format!("{}\n\nSee https://github.com/bordumb/capsec for details on capability-based security in Rust.", f.description),
+                    "markdown": format!("**{}**\n\n[capsec documentation](https://github.com/bordumb/capsec)", f.description)
+                },
                 "defaultConfiguration": {
                     "level": risk_to_sarif_level(f.risk)
                 },
                 "properties": {
-                    "security-severity": risk_to_security_severity(f.risk)
-                },
-                "helpUri": "https://github.com/bordumb/capsec"
+                    "security-severity": risk_to_security_severity(f.risk),
+                    "precision": risk_to_precision(f.risk),
+                    "tags": ["security", "ambient-authority", category_tag]
+                }
             }));
         }
     }
@@ -340,7 +350,9 @@ pub fn report_sarif(findings: &[Finding], workspace_root: &Path) -> String {
                         "artifactLocation": { "uri": relative_path },
                         "region": {
                             "startLine": f.call_line,
-                            "startColumn": f.call_col
+                            "startColumn": f.call_col,
+                            "endLine": f.call_line,
+                            "endColumn": f.call_col
                         }
                     }
                 }],
@@ -352,18 +364,22 @@ pub fn report_sarif(findings: &[Finding], workspace_root: &Path) -> String {
         .collect();
 
     let sarif = serde_json::json!({
-        "$schema": "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/main/sarif-2.1/schema/sarif-schema-2.1.0.json",
+        "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
         "runs": [{
             "tool": {
                 "driver": {
                     "name": "capsec-cli",
                     "version": env!("CARGO_PKG_VERSION"),
+                    "semanticVersion": env!("CARGO_PKG_VERSION"),
                     "informationUri": "https://github.com/bordumb/capsec",
                     "rules": rules
                 }
             },
-            "results": results
+            "results": results,
+            "automationDetails": {
+                "id": "capsec-audit/"
+            }
         }]
     });
 
@@ -396,8 +412,17 @@ fn make_relative(file_path: &str, workspace_root: &Path) -> String {
     }
 }
 
-/// Computes a stable fingerprint for a finding, used by GitHub to deduplicate
-/// alerts across runs. Uses the same identity tuple as baseline diffing.
+/// Maps risk to SARIF precision (how confident we are in the finding).
+fn risk_to_precision(risk: Risk) -> &'static str {
+    match risk {
+        Risk::Critical | Risk::High => "high",
+        Risk::Medium => "medium",
+        Risk::Low => "low",
+    }
+}
+
+/// Computes a stable fingerprint for GitHub Code Scanning deduplication.
+/// Emitted as `partialFingerprints.primaryLocationLineHash`.
 fn compute_fingerprint(f: &Finding) -> String {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
@@ -483,23 +508,47 @@ mod tests {
     }
 
     #[test]
-    fn sarif_has_rules_array() {
+    fn sarif_schema_is_canonical() {
+        let sarif_str = report_sarif(&sample_findings(), &test_root());
+        let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
+        assert_eq!(
+            parsed["$schema"], "https://json.schemastore.org/sarif-2.1.0.json",
+            "$schema must use the canonical json.schemastore.org URL"
+        );
+    }
+
+    #[test]
+    fn sarif_driver_has_semantic_version() {
+        let sarif_str = report_sarif(&sample_findings(), &test_root());
+        let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
+        let driver = &parsed["runs"][0]["tool"]["driver"];
+        assert!(
+            driver["semanticVersion"].is_string(),
+            "driver must have semanticVersion"
+        );
+    }
+
+    #[test]
+    fn sarif_has_automation_details() {
+        let sarif_str = report_sarif(&sample_findings(), &test_root());
+        let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
+        assert!(
+            parsed["runs"][0]["automationDetails"]["id"].is_string(),
+            "run must have automationDetails.id"
+        );
+    }
+
+    #[test]
+    fn sarif_rules_have_all_required_fields() {
         let findings = sample_findings();
         let sarif_str = report_sarif(&findings, &test_root());
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
 
-        let driver = &parsed["runs"][0]["tool"]["driver"];
-        assert!(
-            driver["informationUri"].is_string(),
-            "driver should have informationUri"
-        );
-
-        let rules = driver["rules"]
+        let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
             .as_array()
             .expect("driver should have rules array");
         assert_eq!(rules.len(), 2, "two distinct rule IDs from sample findings");
 
-        // Each rule must have required SARIF fields
         for rule in rules {
             assert!(rule["id"].is_string(), "rule must have id");
             assert!(
@@ -507,10 +556,29 @@ mod tests {
                 "rule must have shortDescription.text"
             );
             assert!(
+                rule["fullDescription"]["text"].is_string(),
+                "rule must have fullDescription.text (GitHub requires this)"
+            );
+            assert!(
+                rule["help"]["text"].is_string(),
+                "rule must have help.text (GitHub requires this)"
+            );
+            assert!(
                 rule["defaultConfiguration"]["level"].is_string(),
                 "rule must have defaultConfiguration.level"
             );
-            assert!(rule["helpUri"].is_string(), "rule must have helpUri");
+
+            let tags = rule["properties"]["tags"]
+                .as_array()
+                .expect("rule must have properties.tags");
+            assert!(
+                tags.iter().any(|t| t == "security"),
+                "tags must include 'security' for GitHub severity to apply"
+            );
+            assert!(
+                rule["properties"]["precision"].is_string(),
+                "rule must have properties.precision"
+            );
         }
     }
 
@@ -646,6 +714,28 @@ mod tests {
             fp0, fp1,
             "different findings should have different fingerprints"
         );
+    }
+
+    #[test]
+    fn sarif_results_have_complete_region() {
+        let findings = sample_findings();
+        let sarif_str = report_sarif(&findings, &test_root());
+        let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
+        let results = parsed["runs"][0]["results"].as_array().unwrap();
+
+        for result in results {
+            let region = &result["locations"][0]["physicalLocation"]["region"];
+            assert!(region["startLine"].is_u64(), "must have startLine");
+            assert!(region["startColumn"].is_u64(), "must have startColumn");
+            assert!(
+                region["endLine"].is_u64(),
+                "must have endLine (GitHub requires this)"
+            );
+            assert!(
+                region["endColumn"].is_u64(),
+                "must have endColumn (GitHub requires this)"
+            );
+        }
     }
 
     #[test]
