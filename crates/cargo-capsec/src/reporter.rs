@@ -370,13 +370,14 @@ pub fn report_sarif(findings: &[Finding], workspace_root: &Path) -> String {
     serde_json::to_string_pretty(&sarif).unwrap_or_default()
 }
 
-/// Maps risk level to numeric security-severity (0.0–10.0) for GitHub Code Scanning.
-fn risk_to_security_severity(risk: Risk) -> f64 {
+/// Maps risk level to security-severity string (0.0–10.0) for GitHub Code Scanning.
+/// GitHub's SARIF parser requires this as a string, not a number.
+fn risk_to_security_severity(risk: Risk) -> String {
     match risk {
-        Risk::Critical => 9.5,
-        Risk::High => 7.5,
-        Risk::Medium => 5.0,
-        Risk::Low => 2.0,
+        Risk::Critical => "9.5".to_string(),
+        Risk::High => "7.5".to_string(),
+        Risk::Medium => "5.0".to_string(),
+        Risk::Low => "2.0".to_string(),
     }
 }
 
@@ -658,17 +659,18 @@ mod tests {
 
         for rule in rules {
             let severity = rule["properties"]["security-severity"]
-                .as_f64()
-                .expect("each rule must have properties.security-severity as number");
+                .as_str()
+                .expect("each rule must have properties.security-severity as string");
+            let val: f64 = severity.parse().expect("must be parseable as f64");
             assert!(
-                (0.0..=10.0).contains(&severity),
+                (0.0..=10.0).contains(&val),
                 "security-severity must be 0.0-10.0, got {severity}"
             );
         }
 
-        // fs/read is Medium → 5.0, net/connect is High → 7.5
-        assert_eq!(rules[0]["properties"]["security-severity"], 5.0);
-        assert_eq!(rules[1]["properties"]["security-severity"], 7.5);
+        // fs/read is Medium → "5.0", net/connect is High → "7.5"
+        assert_eq!(rules[0]["properties"]["security-severity"], "5.0");
+        assert_eq!(rules[1]["properties"]["security-severity"], "7.5");
     }
 
     #[test]
