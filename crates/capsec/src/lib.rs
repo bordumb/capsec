@@ -90,6 +90,10 @@ pub mod process {
 /// ```
 #[cfg(feature = "tokio")]
 pub mod tokio {
+    /// Task spawning with capability transfer.
+    pub mod task {
+        pub use capsec_tokio::task::*;
+    }
     /// Async capability-gated filesystem operations.
     pub mod fs {
         pub use capsec_tokio::file::{AsyncReadFile, AsyncWriteFile};

@@ -9,11 +9,12 @@ keywords = ["security", "capability", "tokio", "async"]
 categories = ["asynchronous", "rust-patterns"]
 
 [features]
+rt = ["dep:tokio", "tokio/rt"]
 fs = ["dep:tokio", "tokio/fs"]
 net = ["dep:tokio", "tokio/net"]
 process = ["dep:tokio", "tokio/process"]
 io-util = ["dep:tokio", "tokio/io-util"]
-full = ["fs", "net", "process", "io-util"]
+full = ["rt", "fs", "net", "process", "io-util"]
 
 [dependencies]
 capsec-core.workspace = true

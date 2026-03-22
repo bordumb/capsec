@@ -144,3 +144,26 @@ async fn context_struct_works_with_async_wrappers() {
     let data = capsec_tokio::fs::read("/dev/null", &ctx).await.unwrap();
     assert!(data.is_empty());
 }
+
+#[tokio::test]
+async fn spawn_with_single_cap() {
+    let root = test_root();
+    let cap = root.fs_read();
+    let handle = capsec_tokio::task::spawn_with(cap, |cap| async move {
+        capsec_tokio::fs::read("/dev/null", &cap).await.unwrap()
+    });
+    let data = handle.await.unwrap();
+    assert!(data.is_empty());
+}
+
+#[tokio::test]
+async fn spawn_with_future_is_send() {
+    fn assert_send<T: Send>(_: &T) {}
+    let root = test_root();
+    let cap = root.fs_read();
+    let handle = capsec_tokio::task::spawn_with(cap, |cap| async move {
+        capsec_tokio::fs::read("/dev/null", &cap).await.unwrap()
+    });
+    assert_send(&handle);
+    let _ = handle.await.unwrap();
+}

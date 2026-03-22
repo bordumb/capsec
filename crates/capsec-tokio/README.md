@@ -10,19 +10,52 @@ You probably want to depend on the `capsec` facade crate with the `tokio` featur
 capsec = { version = "0.1", features = ["tokio"] }
 ```
 
-## Example
+## Capsec + Tokio Guide
+
+There are three common patterns for using capabilities in async code.
+
+### Pattern 1: Scoped proof (no spawn)
+
+When your async code runs on the current task (no `tokio::spawn`), pass capabilities by reference. The scope-before-await pattern inside each wrapper keeps futures `Send` automatically.
 
 ```rust,ignore
-use capsec::prelude::*;
+async fn handle_request(cap: &impl Has<FsRead>) {
+    let data = capsec::tokio::fs::read("/tmp/config.toml", cap).await?;
+    // use data...
+}
+```
 
+### Pattern 2: `spawn_with` (single capability)
+
+When spawning a task that needs one capability, use `capsec_tokio::task::spawn_with`. It converts `Cap<P>` to `SendCap<P>` for you — no need to call `.make_send()` manually.
+
+```rust,ignore
+let cap = root.grant::<FsRead>();
+
+let handle = capsec::tokio::task::spawn_with(cap, |cap| async move {
+    capsec::tokio::fs::read("/tmp/data.bin", &cap).await.unwrap()
+});
+
+let data = handle.await?;
+```
+
+### Pattern 3: `Arc` context (multiple capabilities)
+
+When a spawned task needs multiple capabilities, use `#[capsec::context(send)]` to create a `Send`-safe context struct, wrap it in `Arc`, and clone for each task.
+
+```rust,ignore
 #[capsec::context(send)]
 struct AppCtx {
     fs: FsRead,
+    net: NetConnect,
 }
 
-async fn load_config(ctx: &AppCtx) -> Result<String, CapSecError> {
-    capsec::tokio::fs::read_to_string("/etc/app/config.toml", ctx).await
-}
+let ctx = Arc::new(AppCtx::new(&root));
+
+let ctx2 = Arc::clone(&ctx);
+tokio::spawn(async move {
+    let data = capsec::tokio::fs::read("/tmp/data", &*ctx2).await?;
+});
 ```
 
 ## Modules
@@ -31,6 +64,7 @@ Enable via feature flags (`full` enables all):
 
 | Module | Feature | Permission required | What it wraps |
 |--------|---------|-------------------|---------------|
+| `task` | `rt` | — | `tokio::spawn` — capability-aware task spawning |
 | `fs` | `fs` | `FsRead` / `FsWrite` | `tokio::fs` — read, write, delete, rename, copy, open, create |
 | `net` | `net` | `NetConnect` / `NetBind` | `tokio::net` — TCP connect, TCP/UDP bind |
 | `process` | `process` | `Spawn` | `tokio::process` — Command::new, run |
