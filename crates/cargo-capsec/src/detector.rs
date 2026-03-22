@@ -406,19 +406,32 @@ fn propagate_findings(
     // 1. Build set of function names defined in this file
     let fn_names: HashSet<&str> = file.functions.iter().map(|f| f.name.as_str()).collect();
 
-    // 2. Build direct categories per function: fn_name -> set of (category, max_risk)
-    let mut direct_cats: HashMap<&str, HashSet<(Category, Risk)>> = HashMap::new();
-    for finding in direct_findings {
-        direct_cats
-            .entry(finding.function.as_str())
+    // 2. Build direct categories per function (by index to handle duplicate names)
+    // Also build a name-to-indices map for resolving call targets.
+    let mut direct_cats: HashMap<usize, HashSet<(Category, Risk)>> = HashMap::new();
+    let mut name_to_indices: HashMap<&str, Vec<usize>> = HashMap::new();
+    for (fi, func) in file.functions.iter().enumerate() {
+        name_to_indices
+            .entry(func.name.as_str())
             .or_default()
-            .insert((finding.category.clone(), finding.risk));
+            .push(fi);
+    }
+    for finding in direct_findings {
+        // Assign findings to all functions with matching name (may be >1 for duplicate names)
+        if let Some(indices) = name_to_indices.get(finding.function.as_str()) {
+            for &fi in indices {
+                direct_cats
+                    .entry(fi)
+                    .or_default()
+                    .insert((finding.category.clone(), finding.risk));
+            }
+        }
     }
 
-    // 3. Build local call graph: caller -> [(callee_name, call_site_index)]
+    // 3. Build local call graph: caller_func_idx -> [(callee_name, call_site_index)]
     //    Only single-segment FunctionCall calls to functions in this file.
-    let mut call_graph: HashMap<&str, Vec<(&str, usize)>> = HashMap::new();
-    for func in &file.functions {
+    let mut call_graph: HashMap<usize, Vec<(&str, usize)>> = HashMap::new();
+    for (fi, func) in file.functions.iter().enumerate() {
         for (i, call) in func.calls.iter().enumerate() {
             if matches!(call.kind, CallKind::FunctionCall)
                 && call.segments.len() == 1
@@ -427,7 +440,7 @@ fn propagate_findings(
             // skip direct recursion
             {
                 call_graph
-                    .entry(func.name.as_str())
+                    .entry(fi)
                     .or_default()
                     .push((call.segments[0].as_str(), i));
             }
@@ -439,15 +452,24 @@ fn propagate_findings(
     }
 
     // 4. Fixed-point: propagate categories from callees to callers
-    let mut effective_cats: HashMap<&str, HashSet<(Category, Risk)>> = direct_cats.clone();
+    let mut effective_cats: HashMap<usize, HashSet<(Category, Risk)>> = direct_cats.clone();
     loop {
         let mut changed = false;
-        for (&caller, callees) in &call_graph {
-            for &(callee, _) in callees {
-                if let Some(callee_cats) = effective_cats.get(callee).cloned() {
-                    let caller_set = effective_cats.entry(caller).or_default();
-                    for cat_risk in &callee_cats {
-                        if caller_set.insert(cat_risk.clone()) {
+        for (&caller_fi, callees) in &call_graph {
+            for &(callee_name, _) in callees {
+                // Gather categories from all functions named callee_name
+                let mut callee_cats = HashSet::new();
+                if let Some(callee_indices) = name_to_indices.get(callee_name) {
+                    for &ci in callee_indices {
+                        if let Some(cats) = effective_cats.get(&ci) {
+                            callee_cats.extend(cats.iter().cloned());
+                        }
+                    }
+                }
+                if !callee_cats.is_empty() {
+                    let caller_set = effective_cats.entry(caller_fi).or_default();
+                    for cat_risk in callee_cats {
+                        if caller_set.insert(cat_risk) {
                             changed = true;
                         }
                     }
@@ -461,12 +483,12 @@ fn propagate_findings(
 
     // 5. Generate transitive findings for newly propagated categories
     let mut propagated = Vec::new();
-    for func in &file.functions {
-        let effective = match effective_cats.get(func.name.as_str()) {
+    for (fi, func) in file.functions.iter().enumerate() {
+        let effective = match effective_cats.get(&fi) {
             Some(cats) => cats,
             None => continue,
         };
-        let direct = direct_cats.get(func.name.as_str());
+        let direct = direct_cats.get(&fi);
 
         let effective_deny = merge_deny(&func.deny_categories, crate_deny);
 
@@ -478,11 +500,15 @@ fn propagate_findings(
             }
 
             // Find which local call site brought this category in
-            if let Some(callees) = call_graph.get(func.name.as_str()) {
+            if let Some(callees) = call_graph.get(&fi) {
                 for &(callee, call_idx) in callees {
-                    let callee_has_cat = effective_cats
-                        .get(callee)
-                        .is_some_and(|cats| cats.iter().any(|(c, _)| c == category));
+                    let callee_has_cat = name_to_indices.get(callee).is_some_and(|indices| {
+                        indices.iter().any(|&ci| {
+                            effective_cats
+                                .get(&ci)
+                                .is_some_and(|cats| cats.iter().any(|(c, _)| c == category))
+                        })
+                    });
                     if callee_has_cat {
                         let call = &func.calls[call_idx];
                         let deny_violation = is_category_denied(&effective_deny, category);
