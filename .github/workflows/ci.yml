@@ -54,6 +54,20 @@ jobs:
           components: rustfmt
       - run: cargo fmt --check --all
 
+  lean-proofs:
+    name: Lean 4 Proofs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install elan
+        run: |
+          curl -sSf https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh | sh -s -- -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+      - name: Regenerate Perm.lean from perms.toml
+        run: python3 proofs/scripts/gen_perm.py
+      - name: Build and verify proofs
+        run: cd proofs && lake build
+
   capsec-audit:
     name: Capability Audit
     runs-on: ubuntu-latest

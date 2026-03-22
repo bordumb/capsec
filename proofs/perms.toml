@@ -1,0 +1,39 @@
+# Single source of truth for capsec's permission lattice.
+#
+# Drives both Lean 4 codegen (proofs/scripts/gen_perm.py) and
+# Rust sync tests (crates/capsec-proof/tests/sync_perms_toml.rs).
+#
+# Must match crates/capsec-core/src/permission.rs exactly.
+
+[permissions]
+# Ordered list of all built-in permission types.
+# Order must match struct declarations in permission.rs.
+variants = [
+    "FsRead",
+    "FsWrite",
+    "FsAll",
+    "NetConnect",
+    "NetBind",
+    "NetAll",
+    "EnvRead",
+    "EnvWrite",
+    "Spawn",
+    "Ambient",
+]
+
+[subsumes]
+# Subsumption relationships: Super => [Sub1, Sub2, ...]
+# Must match `impl Subsumes<Sub> for Super` in permission.rs.
+# Note: Ambient subsumes everything via a blanket impl.
+FsAll = ["FsRead", "FsWrite"]
+NetAll = ["NetConnect", "NetBind"]
+Ambient = ["FsRead", "FsWrite", "FsAll", "NetConnect", "NetBind", "NetAll", "EnvRead", "EnvWrite", "Spawn"]
+
+[categories]
+# Permission groupings by domain.
+# Note: No EnvAll exists — the lattice is intentionally asymmetric.
+Filesystem = ["FsRead", "FsWrite", "FsAll"]
+Network = ["NetConnect", "NetBind", "NetAll"]
+Environment = ["EnvRead", "EnvWrite"]
+Process = ["Spawn"]
+Ambient = ["Ambient"]
