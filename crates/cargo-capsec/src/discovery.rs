@@ -8,6 +8,7 @@
 //! With `include_deps = true`, all packages from `cargo metadata` are returned,
 //! including registry dependencies whose source is cached in `~/.cargo/registry/src/`.
 
+use crate::config::Classification;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -23,6 +24,9 @@ pub struct CrateInfo {
     /// `true` if this is a registry dependency (has a `source` field in cargo metadata),
     /// `false` if it's a local workspace member or path dependency.
     pub is_dependency: bool,
+    /// Classification from `[package.metadata.capsec]` in the crate's Cargo.toml.
+    /// `None` if not specified.
+    pub classification: Option<Classification>,
 }
 
 #[derive(Deserialize)]
@@ -37,6 +41,24 @@ struct Package {
     version: String,
     manifest_path: String,
     source: Option<String>,
+    #[serde(default)]
+    metadata: Option<serde_json::Value>,
+}
+
+/// Extracts `classification` from `package.metadata.capsec.classification` JSON value.
+fn extract_classification(metadata: &Option<serde_json::Value>) -> Option<Classification> {
+    let capsec = metadata.as_ref()?.get("capsec")?;
+    let class_str = capsec.get("classification")?.as_str()?;
+    match class_str {
+        "pure" => Some(Classification::Pure),
+        "resource" => Some(Classification::Resource),
+        other => {
+            eprintln!(
+                "Warning: unknown classification '{other}' in [package.metadata.capsec], ignoring (valid: pure, resource)"
+            );
+            None
+        }
+    }
 }
 
 /// Result of workspace discovery: crates and the resolved workspace root.
@@ -99,6 +121,7 @@ pub fn discover_crates(
                 version: package.version.clone(),
                 source_dir: src_dir,
                 is_dependency: package.source.is_some(),
+                classification: extract_classification(&package.metadata),
             });
         }
     }

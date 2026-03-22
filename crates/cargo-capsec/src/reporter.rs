@@ -8,6 +8,7 @@
 //!   for GitHub Code Scanning and other SARIF-compatible tools.
 
 use crate::authorities::{Category, Risk};
+use crate::config::{Classification, ClassificationResult};
 use crate::detector::Finding;
 use colored::Colorize;
 use serde::Serialize;
@@ -18,18 +19,42 @@ use std::path::Path;
 ///
 /// Includes a summary with counts by category and risk level. Prints a green
 /// "OK" message when no findings are present.
-pub fn report_text(findings: &[Finding]) {
+pub fn report_text(findings: &[Finding], classifications: &[ClassificationResult]) {
     let by_crate = group_by_crate(findings);
 
-    if by_crate.is_empty() {
+    if by_crate.is_empty() && classifications.iter().all(|c| c.valid) {
         println!("\n{}  No ambient authority detected.", "OK".green().bold());
+        // Show classification summary if any crates are classified
+        for cr in classifications {
+            if let Some(class) = cr.classification {
+                let label = match class {
+                    Classification::Pure => "pure".green(),
+                    Classification::Resource => "resource".blue(),
+                };
+                println!("  {} v{} [{}]", cr.crate_name, cr.crate_version, label);
+            }
+        }
         return;
     }
 
     for (crate_key, crate_findings) in &by_crate {
+        // Find classification for this crate
+        let class_label = classifications
+            .iter()
+            .find(|cr| crate_key.starts_with(&cr.crate_name))
+            .and_then(|cr| {
+                cr.classification.map(|c| match (c, cr.valid) {
+                    (Classification::Pure, true) => " [pure]".green().to_string(),
+                    (Classification::Pure, false) => " [pure ✗]".red().to_string(),
+                    (Classification::Resource, _) => " [resource]".blue().to_string(),
+                })
+            })
+            .unwrap_or_default();
+
         println!();
-        println!("{}", crate_key.bold());
-        println!("{}", "─".repeat(crate_key.len()));
+        println!("{}{}", crate_key.bold(), class_label);
+        let separator_len = crate_key.len() + if class_label.is_empty() { 0 } else { 12 };
+        println!("{}", "─".repeat(separator_len));
 
         for f in crate_findings {
             if f.is_deny_violation {
@@ -64,6 +89,23 @@ pub fn report_text(findings: &[Finding]) {
                     f.function,
                 );
             }
+        }
+    }
+
+    // Print classification violations
+    let violations: Vec<_> = classifications.iter().filter(|cr| !cr.valid).collect();
+    if !violations.is_empty() {
+        println!();
+        println!("{}", "Classification Violations".red().bold());
+        println!("────────────────────────");
+        for cr in &violations {
+            println!(
+                "  {} v{}: classified as {} but has {} non-build.rs finding(s)",
+                cr.crate_name.bold(),
+                cr.crate_version,
+                "pure".green(),
+                cr.violation_count,
+            );
         }
     }
 
@@ -173,6 +215,12 @@ pub struct JsonCrate {
     pub name: String,
     /// Crate version.
     pub version: String,
+    /// Classification: `"pure"`, `"resource"`, or `null` if unclassified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub classification: Option<String>,
+    /// Whether the classification is valid (no violations). `null` if unclassified.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub classification_valid: Option<bool>,
     /// All ambient authority findings in this crate.
     pub findings: Vec<JsonFinding>,
 }
@@ -223,7 +271,7 @@ pub struct JsonSummary {
 ///
 /// The output conforms to the [`JsonReport`] schema and includes a summary
 /// with counts by category and risk level.
-pub fn report_json(findings: &[Finding]) -> String {
+pub fn report_json(findings: &[Finding], classifications: &[ClassificationResult]) -> String {
     let mut by_crate: BTreeMap<(String, String), Vec<&Finding>> = BTreeMap::new();
     for f in findings {
         by_crate
@@ -234,10 +282,22 @@ pub fn report_json(findings: &[Finding]) -> String {
 
     let crates: Vec<JsonCrate> = by_crate
         .into_iter()
-        .map(|((name, version), fs)| JsonCrate {
-            name,
-            version,
-            findings: fs.into_iter().map(finding_to_json).collect(),
+        .map(|((name, version), fs)| {
+            let cr = classifications
+                .iter()
+                .find(|cr| cr.crate_name == name && cr.crate_version == version);
+            JsonCrate {
+                name,
+                version,
+                classification: cr.and_then(|cr| {
+                    cr.classification.map(|c| match c {
+                        Classification::Pure => "pure".to_string(),
+                        Classification::Resource => "resource".to_string(),
+                    })
+                }),
+                classification_valid: cr.and_then(|cr| cr.classification.map(|_| cr.valid)),
+                findings: fs.into_iter().map(finding_to_json).collect(),
+            }
         })
         .collect();
 
@@ -302,7 +362,11 @@ fn finding_to_json(f: &Finding) -> JsonFinding {
 ///   `properties.security-severity` (string), `properties.precision`
 /// - Results: `region` with all four bounds, `partialFingerprints.capsecFindingHash/v1`
 /// - Run: `semanticVersion`, `runAutomationDetails.id`
-pub fn report_sarif(findings: &[Finding], workspace_root: &Path) -> String {
+pub fn report_sarif(
+    findings: &[Finding],
+    workspace_root: &Path,
+    classifications: &[ClassificationResult],
+) -> String {
     let mut rule_index_map: BTreeMap<String, usize> = BTreeMap::new();
     let mut rules: Vec<serde_json::Value> = Vec::new();
 
@@ -340,7 +404,7 @@ pub fn report_sarif(findings: &[Finding], workspace_root: &Path) -> String {
         }
     }
 
-    let results: Vec<serde_json::Value> = findings
+    let mut results: Vec<serde_json::Value> = findings
         .iter()
         .map(|f| {
             let rule_id = format!(
@@ -375,6 +439,50 @@ pub fn report_sarif(findings: &[Finding], workspace_root: &Path) -> String {
             })
         })
         .collect();
+
+    // Add classification violation rules and results
+    for cr in classifications {
+        if !cr.valid {
+            let rule_id = "capsec/classification/purity-violation";
+            if !rule_index_map.contains_key(rule_id) {
+                let idx = rules.len();
+                rule_index_map.insert(rule_id.to_string(), idx);
+                rules.push(serde_json::json!({
+                    "id": rule_id,
+                    "shortDescription": {
+                        "text": "Crate classified as pure contains I/O operations"
+                    },
+                    "fullDescription": {
+                        "text": "A crate declared as 'pure' in [package.metadata.capsec] has ambient authority findings. Pure crates must not perform I/O."
+                    },
+                    "help": {
+                        "text": "Either remove the I/O operations or change the classification to 'resource'.\n\nSee https://github.com/bordumb/capsec for details.",
+                        "markdown": "**Purity violation**: either remove I/O or reclassify as `resource`.\n\n[capsec documentation](https://github.com/bordumb/capsec)"
+                    },
+                    "defaultConfiguration": {
+                        "level": "error"
+                    },
+                    "properties": {
+                        "security-severity": "7.0",
+                        "precision": "high",
+                        "tags": ["security", "classification"]
+                    }
+                }));
+            }
+            let rule_index = rule_index_map[rule_id];
+            results.push(serde_json::json!({
+                "ruleId": rule_id,
+                "ruleIndex": rule_index,
+                "level": "error",
+                "message": {
+                    "text": format!(
+                        "Crate '{}' v{} is classified as 'pure' but has {} non-build.rs finding(s)",
+                        cr.crate_name, cr.crate_version, cr.violation_count
+                    )
+                }
+            }));
+        }
+    }
 
     let sarif = serde_json::json!({
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
@@ -507,7 +615,7 @@ mod tests {
     #[test]
     fn json_report_is_valid() {
         let findings = sample_findings();
-        let json_str = report_json(&findings);
+        let json_str = report_json(&findings, &[]);
         let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
         assert_eq!(parsed["summary"]["total_findings"], 2);
         assert_eq!(parsed["crates"][0]["name"], "my-app");
@@ -516,7 +624,7 @@ mod tests {
     #[test]
     fn sarif_report_is_valid() {
         let findings = sample_findings();
-        let sarif_str = report_sarif(&findings, &test_root());
+        let sarif_str = report_sarif(&findings, &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         assert_eq!(parsed["version"], "2.1.0");
         assert_eq!(parsed["runs"][0]["results"].as_array().unwrap().len(), 2);
@@ -524,7 +632,7 @@ mod tests {
 
     #[test]
     fn sarif_schema_is_canonical() {
-        let sarif_str = report_sarif(&sample_findings(), &test_root());
+        let sarif_str = report_sarif(&sample_findings(), &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         assert_eq!(
             parsed["$schema"], "https://json.schemastore.org/sarif-2.1.0.json",
@@ -534,7 +642,7 @@ mod tests {
 
     #[test]
     fn sarif_driver_has_semantic_version() {
-        let sarif_str = report_sarif(&sample_findings(), &test_root());
+        let sarif_str = report_sarif(&sample_findings(), &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         let driver = &parsed["runs"][0]["tool"]["driver"];
         assert!(
@@ -545,7 +653,7 @@ mod tests {
 
     #[test]
     fn sarif_has_automation_details() {
-        let sarif_str = report_sarif(&sample_findings(), &test_root());
+        let sarif_str = report_sarif(&sample_findings(), &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         assert!(
             parsed["runs"][0]["automationDetails"]["id"].is_string(),
@@ -556,7 +664,7 @@ mod tests {
     #[test]
     fn sarif_rules_have_all_required_fields() {
         let findings = sample_findings();
-        let sarif_str = report_sarif(&findings, &test_root());
+        let sarif_str = report_sarif(&findings, &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
 
         let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
@@ -600,7 +708,7 @@ mod tests {
     #[test]
     fn sarif_results_have_valid_rule_index() {
         let findings = sample_findings();
-        let sarif_str = report_sarif(&findings, &test_root());
+        let sarif_str = report_sarif(&findings, &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
 
         let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
@@ -665,7 +773,7 @@ mod tests {
             },
         ];
 
-        let sarif_str = report_sarif(&findings, &test_root());
+        let sarif_str = report_sarif(&findings, &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
             .as_array()
@@ -687,7 +795,7 @@ mod tests {
 
     #[test]
     fn sarif_empty_findings_has_empty_rules() {
-        let sarif_str = report_sarif(&[], &test_root());
+        let sarif_str = report_sarif(&[], &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
             .as_array()
@@ -697,7 +805,7 @@ mod tests {
 
     #[test]
     fn empty_findings_json() {
-        let json_str = report_json(&[]);
+        let json_str = report_json(&[], &[]);
         let parsed: serde_json::Value = serde_json::from_str(&json_str).unwrap();
         assert_eq!(parsed["summary"]["total_findings"], 0);
     }
@@ -705,7 +813,7 @@ mod tests {
     #[test]
     fn sarif_results_have_partial_fingerprints() {
         let findings = sample_findings();
-        let sarif_str = report_sarif(&findings, &test_root());
+        let sarif_str = report_sarif(&findings, &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         let results = parsed["runs"][0]["results"].as_array().unwrap();
 
@@ -736,7 +844,7 @@ mod tests {
     #[test]
     fn sarif_results_have_complete_region() {
         let findings = sample_findings();
-        let sarif_str = report_sarif(&findings, &test_root());
+        let sarif_str = report_sarif(&findings, &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         let results = parsed["runs"][0]["results"].as_array().unwrap();
 
@@ -758,7 +866,7 @@ mod tests {
     #[test]
     fn sarif_rules_have_security_severity() {
         let findings = sample_findings();
-        let sarif_str = report_sarif(&findings, &test_root());
+        let sarif_str = report_sarif(&findings, &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         let rules = parsed["runs"][0]["tool"]["driver"]["rules"]
             .as_array()
@@ -783,7 +891,7 @@ mod tests {
     #[test]
     fn sarif_artifact_uris_are_relative() {
         let findings = sample_findings();
-        let sarif_str = report_sarif(&findings, &test_root());
+        let sarif_str = report_sarif(&findings, &test_root(), &[]);
         let parsed: serde_json::Value = serde_json::from_str(&sarif_str).unwrap();
         let results = parsed["runs"][0]["results"].as_array().unwrap();
 

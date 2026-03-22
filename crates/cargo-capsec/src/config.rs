@@ -30,8 +30,22 @@
 
 use crate::authorities::{Category, CustomAuthority, Risk};
 use crate::detector::Finding;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::Path;
+
+/// Crate classification for capability-based security analysis.
+///
+/// Inspired by Wyvern's resource/pure module distinction (Melicher et al., ECOOP 2017).
+/// A "pure" crate should contain no ambient authority (no I/O, no process spawning, etc.).
+/// A "resource" crate is expected to have ambient authority findings.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Classification {
+    /// No I/O, no state, no side effects — safe to import without capability grants.
+    Pure,
+    /// Contains I/O or ambient authority — requires explicit capability grants.
+    Resource,
+}
 
 const CONFIG_FILE: &str = ".capsec.toml";
 
@@ -49,6 +63,20 @@ pub struct Config {
     pub authority: Vec<AuthorityEntry>,
     #[serde(default)]
     pub allow: Vec<AllowEntry>,
+    #[serde(default)]
+    pub classify: Vec<ClassifyEntry>,
+}
+
+/// A crate classification entry from `[[classify]]` in `.capsec.toml`.
+///
+/// Overrides any `[package.metadata.capsec]` classification in the crate's own Cargo.toml.
+#[derive(Debug, Deserialize)]
+pub struct ClassifyEntry {
+    /// Crate name to classify (e.g., `"serde"`, `"my-app"`).
+    #[serde(rename = "crate")]
+    pub crate_name: String,
+    /// Classification: `pure` or `resource`.
+    pub classification: Classification,
 }
 
 /// Crate-level deny configuration from `[deny]` in `.capsec.toml`.
@@ -187,6 +215,68 @@ pub fn should_allow(finding: &Finding, config: &Config) -> bool {
     })
 }
 
+/// Result of classification verification for a single crate.
+#[derive(Debug, Clone, Serialize)]
+pub struct ClassificationResult {
+    /// Crate name.
+    pub crate_name: String,
+    /// Crate version.
+    pub crate_version: String,
+    /// Resolved classification (`None` if unclassified).
+    pub classification: Option<Classification>,
+    /// `true` if the classification is valid (no violations).
+    pub valid: bool,
+    /// Number of non-build.rs findings that violate a "pure" classification.
+    pub violation_count: usize,
+}
+
+/// Verifies whether a crate's classification matches its audit findings.
+///
+/// A crate classified as `Pure` that has non-build.rs findings is a violation.
+/// Build.rs findings are excluded (compile-time only, not runtime authority).
+/// Resource and unclassified crates always pass.
+pub fn verify_classification(
+    classification: Option<Classification>,
+    findings: &[Finding],
+    crate_name: &str,
+    crate_version: &str,
+) -> ClassificationResult {
+    let violation_count = match classification {
+        Some(Classification::Pure) => findings
+            .iter()
+            .filter(|f| f.crate_name == crate_name && !f.is_build_script)
+            .count(),
+        _ => 0,
+    };
+
+    ClassificationResult {
+        crate_name: crate_name.to_string(),
+        crate_version: crate_version.to_string(),
+        classification,
+        valid: violation_count == 0,
+        violation_count,
+    }
+}
+
+/// Resolves the final classification for a crate by merging Cargo.toml metadata
+/// with `.capsec.toml` `[[classify]]` overrides.
+///
+/// Precedence: `.capsec.toml` wins over `Cargo.toml` metadata (consumer > author).
+pub fn resolve_classification(
+    crate_name: &str,
+    cargo_toml_classification: Option<Classification>,
+    config: &Config,
+) -> Option<Classification> {
+    // Check .capsec.toml [[classify]] first (consumer override)
+    for entry in &config.classify {
+        if entry.crate_name == crate_name {
+            return Some(entry.classification);
+        }
+    }
+    // Fall back to Cargo.toml metadata
+    cargo_toml_classification
+}
+
 /// Returns `true` if a file path matches any `[analysis].exclude` glob pattern.
 ///
 /// Uses the [`globset`] crate for correct glob semantics (supports `**`, `*`,
@@ -287,6 +377,154 @@ mod tests {
         };
         let normalized = deny.normalized_categories();
         assert_eq!(normalized, vec!["fs", "net"]);
+    }
+
+    #[test]
+    fn parse_classify_entries() {
+        let toml = r#"
+            [[classify]]
+            crate = "serde"
+            classification = "pure"
+
+            [[classify]]
+            crate = "tokio"
+            classification = "resource"
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert_eq!(config.classify.len(), 2);
+        assert_eq!(config.classify[0].crate_name, "serde");
+        assert_eq!(config.classify[0].classification, Classification::Pure);
+        assert_eq!(config.classify[1].crate_name, "tokio");
+        assert_eq!(config.classify[1].classification, Classification::Resource);
+    }
+
+    #[test]
+    fn missing_classify_defaults_to_empty() {
+        let toml = r#"
+            [[allow]]
+            crate = "tracing"
+        "#;
+        let config: Config = toml::from_str(toml).unwrap();
+        assert!(config.classify.is_empty());
+    }
+
+    #[test]
+    fn resolve_capsec_toml_overrides_cargo_metadata() {
+        let config = Config {
+            classify: vec![ClassifyEntry {
+                crate_name: "my-lib".to_string(),
+                classification: Classification::Resource,
+            }],
+            ..Config::default()
+        };
+        let result = resolve_classification("my-lib", Some(Classification::Pure), &config);
+        assert_eq!(result, Some(Classification::Resource));
+    }
+
+    #[test]
+    fn resolve_falls_back_to_cargo_metadata() {
+        let config = Config::default();
+        let result = resolve_classification("my-lib", Some(Classification::Pure), &config);
+        assert_eq!(result, Some(Classification::Pure));
+    }
+
+    #[test]
+    fn resolve_unclassified_returns_none() {
+        let config = Config::default();
+        let result = resolve_classification("my-lib", None, &config);
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn verify_pure_crate_with_no_findings_passes() {
+        let result = verify_classification(Some(Classification::Pure), &[], "my-lib", "0.1.0");
+        assert!(result.valid);
+        assert_eq!(result.violation_count, 0);
+    }
+
+    #[test]
+    fn verify_pure_crate_with_findings_fails() {
+        let findings = vec![Finding {
+            file: "src/lib.rs".to_string(),
+            function: "do_io".to_string(),
+            function_line: 1,
+            call_line: 2,
+            call_col: 5,
+            call_text: "std::fs::read".to_string(),
+            category: crate::authorities::Category::Fs,
+            subcategory: "read".to_string(),
+            risk: crate::authorities::Risk::Medium,
+            description: "Read file".to_string(),
+            is_build_script: false,
+            crate_name: "my-lib".to_string(),
+            crate_version: "0.1.0".to_string(),
+            is_deny_violation: false,
+            is_transitive: false,
+        }];
+        let result =
+            verify_classification(Some(Classification::Pure), &findings, "my-lib", "0.1.0");
+        assert!(!result.valid);
+        assert_eq!(result.violation_count, 1);
+    }
+
+    #[test]
+    fn verify_pure_crate_excludes_build_script_findings() {
+        let findings = vec![Finding {
+            file: "build.rs".to_string(),
+            function: "main".to_string(),
+            function_line: 1,
+            call_line: 2,
+            call_col: 5,
+            call_text: "std::env::var".to_string(),
+            category: crate::authorities::Category::Env,
+            subcategory: "read".to_string(),
+            risk: crate::authorities::Risk::Low,
+            description: "Read env var".to_string(),
+            is_build_script: true,
+            crate_name: "my-lib".to_string(),
+            crate_version: "0.1.0".to_string(),
+            is_deny_violation: false,
+            is_transitive: false,
+        }];
+        let result =
+            verify_classification(Some(Classification::Pure), &findings, "my-lib", "0.1.0");
+        assert!(result.valid);
+        assert_eq!(result.violation_count, 0);
+    }
+
+    #[test]
+    fn verify_resource_crate_always_passes() {
+        let findings = vec![Finding {
+            file: "src/lib.rs".to_string(),
+            function: "do_io".to_string(),
+            function_line: 1,
+            call_line: 2,
+            call_col: 5,
+            call_text: "std::fs::read".to_string(),
+            category: crate::authorities::Category::Fs,
+            subcategory: "read".to_string(),
+            risk: crate::authorities::Risk::Medium,
+            description: "Read file".to_string(),
+            is_build_script: false,
+            crate_name: "my-lib".to_string(),
+            crate_version: "0.1.0".to_string(),
+            is_deny_violation: false,
+            is_transitive: false,
+        }];
+        let result =
+            verify_classification(Some(Classification::Resource), &findings, "my-lib", "0.1.0");
+        assert!(result.valid);
+    }
+
+    #[test]
+    fn invalid_classification_value_errors() {
+        let toml = r#"
+            [[classify]]
+            crate = "bad"
+            classification = "unknown"
+        "#;
+        let result: Result<Config, _> = toml::from_str(toml);
+        assert!(result.is_err());
     }
 
     #[test]

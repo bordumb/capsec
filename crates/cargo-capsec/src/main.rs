@@ -115,6 +115,17 @@ fn run_audit(args: AuditArgs) {
     // Apply allow rules
     all_findings.retain(|f| !config::should_allow(f, &cfg));
 
+    // Classification verification
+    let classification_results: Vec<config::ClassificationResult> = crates
+        .iter()
+        .map(|krate| {
+            let resolved = config::resolve_classification(&krate.name, krate.classification, &cfg);
+            config::verify_classification(resolved, &all_findings, &krate.name, &krate.version)
+        })
+        .collect();
+
+    let has_classification_violations = classification_results.iter().any(|r| !r.valid);
+
     // Load baseline once if needed for diff or fail-on
     let baseline_data = if args.diff || args.fail_on.is_some() {
         baseline::load_baseline(&workspace_root, &fs_read)
@@ -135,9 +146,15 @@ fn run_audit(args: AuditArgs) {
     // Report (suppress with --quiet)
     if !args.quiet {
         match args.format.as_str() {
-            "json" => println!("{}", reporter::report_json(&all_findings)),
-            "sarif" => println!("{}", reporter::report_sarif(&all_findings, &workspace_root)),
-            _ => reporter::report_text(&all_findings),
+            "json" => println!(
+                "{}",
+                reporter::report_json(&all_findings, &classification_results)
+            ),
+            "sarif" => println!(
+                "{}",
+                reporter::report_sarif(&all_findings, &workspace_root, &classification_results)
+            ),
+            _ => reporter::report_text(&all_findings, &classification_results),
         }
     }
 
@@ -149,7 +166,11 @@ fn run_audit(args: AuditArgs) {
         }
     }
 
-    // Exit code
+    // Exit code — classification violations also trigger failure
+    if has_classification_violations && args.fail_on.is_some() {
+        std::process::exit(1);
+    }
+
     if let Some(ref fail_level) = args.fail_on {
         let threshold = Risk::parse(fail_level);
 
@@ -265,8 +286,11 @@ fn run_check_deny(args: CheckDenyArgs) {
 
     // Report violations
     match args.format.as_str() {
-        "json" => println!("{}", reporter::report_json(&violations)),
-        "sarif" => println!("{}", reporter::report_sarif(&violations, &workspace_root)),
+        "json" => println!("{}", reporter::report_json(&violations, &[])),
+        "sarif" => println!(
+            "{}",
+            reporter::report_sarif(&violations, &workspace_root, &[])
+        ),
         _ => {
             // Text output grouped by function
             use std::collections::BTreeMap;
