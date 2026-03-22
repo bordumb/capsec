@@ -139,9 +139,8 @@ fn process_and_save(config: &ConfigService, output: &OutputWriter) {
 
 // ─── Entry point ─────────────────────────────────────────────────
 
-fn main() {
-    let root = capsec::root();
-
+#[capsec::main]
+fn main(root: CapRoot) {
     // Inject capabilities at the domain wrapper boundary.
     // After this point, no function sees Cap<P> or Has<P>.
     let config = ConfigService::new("/tmp/capsec-demo/config", root.grant::<FsRead>());

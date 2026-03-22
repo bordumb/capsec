@@ -154,6 +154,12 @@ macro_rules! impl_tuple_has_second {
     ($single:ident) => {};
 }
 
+// NOTE: Scaling cliff — these macros enumerate all concrete permission pairs.
+// Current: 10 types → 190 impls (100 first-element + 90 second-element).
+// Adding 3 more types → ~319 impls. 3-tuples are not supported at all.
+// This is a Rust coherence limitation (no generic impl without specialization).
+// Workaround: use #[capsec::context] structs instead of tuples for >2 permissions.
+// If the permission count grows significantly, consider generating impls via build script.
 impl_tuple_has_first!(
     [FsRead, FsWrite, FsAll, NetConnect, NetBind, NetAll, EnvRead, EnvWrite, Spawn, Ambient];
     [FsRead, FsWrite, FsAll, NetConnect, NetBind, NetAll, EnvRead, EnvWrite, Spawn, Ambient]

@@ -174,6 +174,17 @@ mod tests {
     }
 
     #[test]
+    fn host_scope_rejects_domain_confusion() {
+        let scope = HostScope::new(["api.example.com"]);
+        // "api.example.com.evil.com" must NOT match "api.example.com"
+        assert!(scope.check("api.example.com.evil.com").is_err());
+        // But exact match and valid suffixes must still work
+        assert!(scope.check("api.example.com").is_ok());
+        assert!(scope.check("api.example.com:443").is_ok());
+        assert!(scope.check("api.example.com/path").is_ok());
+    }
+
+    #[test]
     fn dir_scope_rejects_traversal() {
         // Create a scope for a real directory
         let scope = DirScope::new("/tmp").unwrap();
