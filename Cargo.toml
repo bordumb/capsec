@@ -8,6 +8,7 @@ members = [
     "crates/cargo-capsec",
     "crates/capsec-tokio",
     "crates/capsec-tests",
+    "crates/capsec-proof",
 ]
 exclude = [
     "crates/capsec-example-db",
