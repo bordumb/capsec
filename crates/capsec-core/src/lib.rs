@@ -44,6 +44,7 @@ pub mod cap;
 pub mod error;
 pub mod has;
 pub mod permission;
+pub mod prescript;
 pub mod root;
 pub mod runtime;
 

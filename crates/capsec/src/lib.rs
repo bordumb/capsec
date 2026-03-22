@@ -46,6 +46,10 @@ pub use capsec_core::attenuate::{Attenuated, DirScope, HostScope, Scope};
 
 pub use capsec_core::runtime::{Revoker, RuntimeCap, RuntimeSendCap, TimedCap, TimedSendCap};
 
+pub use capsec_core::prescript::{
+    ApproverA, ApproverB, DualKeyCap, DualKeySendCap, LogEntry, LoggedCap, LoggedSendCap,
+};
+
 /// Creates a `CapRoot` and passes it to the given closure.
 ///
 /// This is a convenience entry point. Panics if `root()` has already been called.
@@ -116,8 +120,8 @@ pub mod tokio {
 /// ```
 pub mod prelude {
     pub use crate::{
-        Ambient, Attenuated, Cap, CapRoot, CapSecError, DirScope, EnvRead, EnvWrite, FsAll, FsRead,
-        FsWrite, Has, HostScope, NetAll, NetBind, NetConnect, Permission, Revoker, RuntimeCap,
-        Spawn, Subsumes, TimedCap,
+        Ambient, ApproverA, ApproverB, Attenuated, Cap, CapRoot, CapSecError, DirScope, DualKeyCap,
+        EnvRead, EnvWrite, FsAll, FsRead, FsWrite, Has, HostScope, LoggedCap, NetAll, NetBind,
+        NetConnect, Permission, Revoker, RuntimeCap, Spawn, Subsumes, TimedCap,
     };
 }

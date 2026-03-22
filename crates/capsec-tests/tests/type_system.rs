@@ -578,6 +578,83 @@ fn runtime_cap_with_subsumption() {
     needs_fs_read(&cap); // FsAll subsumes FsRead
 }
 
+// ============================================================================
+// N. PRESCRIPT CAPS (LoggedCap, DualKeyCap)
+// ============================================================================
+
+#[test]
+fn logged_cap_try_cap_returns_valid_cap_for_capsec_std() {
+    use capsec_core::prescript::LoggedCap;
+
+    let root = test_root();
+    let cap = root.grant::<FsRead>();
+    let lcap = LoggedCap::new(cap);
+
+    let cap = lcap.try_cap().expect("should be active");
+    let result = capsec_std::fs::read("/dev/null", &cap);
+    assert!(
+        result.is_ok(),
+        "try_cap() → Cap<P> should work with capsec-std"
+    );
+}
+
+#[test]
+fn logged_cap_records_io_attempt() {
+    use capsec_core::prescript::LoggedCap;
+
+    let root = test_root();
+    let cap = root.grant::<FsRead>();
+    let lcap = LoggedCap::new(cap);
+
+    let cap = lcap.try_cap().expect("should be active");
+    let _ = capsec_std::fs::read("/dev/null", &cap);
+    assert_eq!(lcap.entry_count(), 1);
+}
+
+#[test]
+fn dual_key_cap_try_cap_returns_valid_cap() {
+    use capsec_core::prescript::DualKeyCap;
+
+    let root = test_root();
+    let cap = root.grant::<FsRead>();
+    let (dcap, a, b) = DualKeyCap::new(cap);
+    a.approve();
+    b.approve();
+
+    let cap = dcap.try_cap().expect("should be active");
+    fn needs_fs(_: &impl Has<FsRead>) {}
+    needs_fs(&cap);
+}
+
+#[test]
+fn dual_key_without_approval_prevents_io() {
+    use capsec_core::error::CapSecError;
+    use capsec_core::prescript::DualKeyCap;
+
+    let root = test_root();
+    let cap = root.grant::<FsRead>();
+    let (dcap, _a, _b) = DualKeyCap::new(cap);
+    assert!(matches!(
+        dcap.try_cap(),
+        Err(CapSecError::InsufficientApprovals)
+    ));
+}
+
+#[test]
+fn dual_key_with_subsumption() {
+    use capsec_core::prescript::DualKeyCap;
+
+    let root = test_root();
+    let cap = root.grant::<FsAll>();
+    let (dcap, a, b) = DualKeyCap::new(cap);
+    a.approve();
+    b.approve();
+
+    let cap = dcap.try_cap().expect("should be active");
+    fn needs_fs_read(_: &impl Has<FsRead>) {}
+    needs_fs_read(&cap); // FsAll subsumes FsRead
+}
+
 /// A malicious Has<FsRead> impl that loops forever instead of returning a Cap.
 ///
 /// Cannot be tested directly (would hang the test runner), but the behavior is

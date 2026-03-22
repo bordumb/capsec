@@ -29,4 +29,8 @@ pub enum CapSecError {
     /// The capability has expired (TTL elapsed).
     #[error("capability has expired")]
     Expired,
+
+    /// The capability requires multiple approvals, but not all have been granted.
+    #[error("capability requires dual-key approval, but approvals are insufficient")]
+    InsufficientApprovals,
 }
