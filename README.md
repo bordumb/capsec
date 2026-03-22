@@ -297,18 +297,67 @@ fn main(root: CapRoot) -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+### Audited capabilities
+
+`LoggedCap<P>` records every `try_cap()` invocation in an append-only audit log — implementing Saltzer & Schroeder's *compromise recording* principle ([The Protection of Information in Computer Systems](https://www.cs.virginia.edu/~evans/cs551/saltzer/), 1975, Design Principle #8):
+
+```rust
+use capsec::prelude::*;
+
+#[capsec::main]
+fn main(root: CapRoot) -> Result<(), Box<dyn std::error::Error>> {
+    let logged_cap = LoggedCap::new(root.fs_read());
+
+    // Every exercise is recorded
+    let cap = logged_cap.try_cap()?;
+    capsec::fs::read("/dev/null", &cap)?;
+
+    // Inspect the audit trail
+    for entry in logged_cap.entries() {
+        println!("{}: {} (granted={})",
+            entry.permission, entry.timestamp.elapsed().as_micros(), entry.granted);
+    }
+    Ok(())
+}
+```
+
+### Dual-key authorization
+
+`DualKeyCap<P>` requires two independent approvals before `try_cap()` succeeds — implementing Saltzer & Schroeder's *separation of privilege* principle (Design Principle #5: "a mechanism that requires two keys to unlock it is more robust than one that allows access to the presenter of only a single key"):
+
+```rust
+use capsec::prelude::*;
+
+#[capsec::main]
+fn main(root: CapRoot) -> Result<(), Box<dyn std::error::Error>> {
+    let (dual_cap, approver_a, approver_b) = DualKeyCap::new(root.fs_write());
+
+    // Distribute handles to separate subsystems
+    // Neither alone can exercise the capability
+    approver_a.approve();  // manager approves
+    approver_b.approve();  // security officer approves
+
+    // Only now does try_cap() succeed
+    let cap = dual_cap.try_cap()?;
+    capsec::fs::write("/tmp/authorized.txt", "data", &cap)?;
+    Ok(())
+}
+```
+
 ### Key properties
 
-- `RuntimeCap` and `TimedCap` do **not** implement `Has<P>` — fallibility is explicit via `try_cap()` at every call site
-- Both are `!Send` by default — use `make_send()` to opt into cross-thread transfer
+- `RuntimeCap`, `TimedCap`, `LoggedCap`, and `DualKeyCap` do **not** implement `Has<P>` — fallibility is explicit via `try_cap()` at every call site
+- All are `!Send` by default — use `make_send()` to opt into cross-thread transfer
 - Cloning a `RuntimeCap` shares the revocation flag — revoking one revokes all clones
+- Cloning a `LoggedCap` shares the audit log — entries from any clone appear in the same log
 - `Revoker` is `Send + Sync + Clone` — revoke from any thread
+- `ApproverA` / `ApproverB` are `Send + Sync` but **not** `Clone` — move-only to enforce separation of privilege
 
 ### How capsec compares
 
 | Tool | Approach | Layer |
 |------|----------|-------|
-| **capsec** | Compile-time types (`Has<P>` bounds) + runtime caps (`RuntimeCap`, `TimedCap`) + static audit | Source-level, cooperative |
+| **capsec** | Compile-time types + runtime caps (revocable, timed, audited, dual-key) + static audit | Source-level, cooperative |
 | **[cap-std](https://github.com/bytecodealliance/cap-std)** | Runtime capability handles (ambient authority removal) | OS-level, WASI-oriented |
 | **[cargo-scan](https://github.com/AlfredoSystems/cargo-scan)** | Static analysis of dangerous API usage | Source-level, research prototype |
 | **[cargo-cgsec](https://github.com/nicholasgasior/cargo-cgsec)** | Call graph capability analysis (Capslock port) | Source-level, audit only |
@@ -318,6 +367,18 @@ fn main(root: CapRoot) -> Result<(), Box<dyn std::error::Error>> {
 `cargo-scan` (from UC San Diego) performs similar static analysis to `cargo capsec audit`. capsec adds the type-system enforcement layer and ships as a single workspace with both tools integrated.
 
 `cargo-cgsec` is a Rust port of Google's Capslock, funded by the Rust Foundation. It performs call graph analysis to identify capability usage — audit only, no enforcement or runtime layer. capsec covers the same audit surface via `cargo capsec audit` and adds compile-time type enforcement and runtime capability control.
+
+---
+
+## Academic foundations
+
+capsec's design draws from three foundational papers in capability-based security:
+
+- **Dennis & Van Horn (1966)** — [Programming Semantics for Multiprogrammed Computations](https://dl.acm.org/doi/10.1145/365230.365252). Introduced capability lists (C-lists), unforgeable capability tokens, and spheres of protection. capsec's `Cap<P>` is a direct descendant of their capability concept; `Cap::new()` being `pub(crate)` enforces unforgeability in software the way their hardware enforced it in the supervisor.
+
+- **Saltzer & Schroeder (1975)** — [The Protection of Information in Computer Systems](https://www.cs.virginia.edu/~evans/cs551/saltzer/). Defined the eight design principles for protection mechanisms. capsec implements six: economy of mechanism (zero-sized types), fail-safe defaults (no cap = no access), least privilege (the core mission), open design (open source + adversarial test suite), separation of privilege (`DualKeyCap`), and compromise recording (`LoggedCap`). The two partially met — complete mediation and least common mechanism — are inherent limitations of a library-level approach.
+
+- **Melicher et al. (2017)** — [A Capability-Based Module System for Authority Control](https://www.cs.cmu.edu/~aldrich/papers/ecoop17modules.pdf) (ECOOP 2017). Formalized non-transitive authority in the Wyvern language, proving that a module's authority can be determined by inspecting only its interface. capsec achieves the same property: `Has<P>` bounds make a function's authority visible in its signature, and `Attenuated<P, S>` / runtime cap types that don't implement `Has<P>` enforce non-transitivity.
 
 ---
 
