@@ -295,38 +295,66 @@ fn requires_inner(
         }
     });
 
-    // Build assertion block if needed
+    // Build assertion block or auto-generate where bounds
+    let mut modified_sig: Option<syn::Signature> = None;
     let assertion = if let Some(ref param_name) = on_param {
         // Find the parameter and extract its type
         let param_type = find_param_type(&func.sig, param_name)?;
         let inner_type = unwrap_references(&param_type);
 
-        let assert_fns: Vec<_> = cap_types
-            .iter()
-            .enumerate()
-            .map(|(i, perm_ty)| {
-                let fn_name = format_ident!("_assert_has_{}", i);
-                quote! {
-                    fn #fn_name<T: capsec_core::has::Has<#perm_ty>>() {}
-                }
-            })
-            .collect();
+        // Check if the inner type is a generic type parameter
+        let generic_ident = func.sig.generics.type_params().find_map(|tp| {
+            if let Type::Path(ref type_path) = *inner_type
+                && type_path.path.is_ident(&tp.ident)
+            {
+                Some(tp.ident.clone())
+            } else {
+                None
+            }
+        });
 
-        let assert_calls: Vec<_> = (0..cap_types.len())
-            .map(|i| {
-                let fn_name = format_ident!("_assert_has_{}", i);
-                quote! { #fn_name::<#inner_type>(); }
-            })
-            .collect();
+        if let Some(ref gen_ident) = generic_ident {
+            // Mode 4: Auto-generate Has<P> bounds on the generic type parameter
+            let mut sig = func.sig.clone();
+            let where_clause = sig.generics.make_where_clause();
+            let bounds: Vec<_> = cap_types
+                .iter()
+                .map(|perm_ty| quote! { capsec_core::has::Has<#perm_ty> })
+                .collect();
+            where_clause
+                .predicates
+                .push(syn::parse2(quote! { #gen_ident: #(#bounds)+* }).unwrap());
+            modified_sig = Some(sig);
+            None // no assertion block needed
+        } else {
+            // Mode 2: Concrete type — generate assertion block
+            let assert_fns: Vec<_> = cap_types
+                .iter()
+                .enumerate()
+                .map(|(i, perm_ty)| {
+                    let fn_name = format_ident!("_assert_has_{}", i);
+                    quote! {
+                        fn #fn_name<T: capsec_core::has::Has<#perm_ty>>() {}
+                    }
+                })
+                .collect();
 
-        Some(quote! {
-            const _: () = {
-                #(#assert_fns)*
-                fn _check() {
-                    #(#assert_calls)*
-                }
-            };
-        })
+            let assert_calls: Vec<_> = (0..cap_types.len())
+                .map(|i| {
+                    let fn_name = format_ident!("_assert_has_{}", i);
+                    quote! { #fn_name::<#inner_type>(); }
+                })
+                .collect();
+
+            Some(quote! {
+                const _: () = {
+                    #(#assert_fns)*
+                    fn _check() {
+                        #(#assert_calls)*
+                    }
+                };
+            })
+        }
     } else if !has_impl_bounds && !func.sig.inputs.is_empty() && !cap_types.is_empty() {
         // Concrete types present but no `on` keyword
         return Err(syn::Error::new_spanned(
@@ -340,7 +368,7 @@ fn requires_inner(
     };
 
     let func_vis = &func.vis;
-    let func_sig = &func.sig;
+    let func_sig = modified_sig.as_ref().unwrap_or(&func.sig);
     let func_block = &func.block;
     let func_attrs = &func.attrs;
 

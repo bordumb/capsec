@@ -411,6 +411,47 @@ fn requires_impl_still_works() {
 }
 
 // ============================================================================
+// J2. REQUIRES WITH GENERIC TYPE PARAM — AUTO-GENERATED BOUNDS
+// ============================================================================
+
+#[capsec_macro::requires(fs::read, on = ctx)]
+fn fn_with_requires_generic<C>(ctx: &C) {
+    let _: Cap<FsRead> = ctx.cap_ref();
+}
+
+#[test]
+fn requires_auto_bounds_single() {
+    let root = test_root();
+    let ctx = TestCtx::new(&root);
+    fn_with_requires_generic(&ctx);
+}
+
+#[capsec_macro::requires(fs::read, net::connect, on = ctx)]
+fn fn_with_requires_generic_multi<C>(ctx: &C) {
+    let _: Cap<FsRead> = ctx.cap_ref();
+    let _: Cap<NetConnect> = ctx.cap_ref();
+}
+
+#[test]
+fn requires_auto_bounds_multiple() {
+    let root = test_root();
+    let ctx = TestCtx::new(&root);
+    fn_with_requires_generic_multi(&ctx);
+}
+
+#[capsec_macro::requires(fs::read, on = ctx)]
+fn fn_with_requires_generic_existing_bounds<C: 'static>(ctx: &C) {
+    let _: Cap<FsRead> = ctx.cap_ref();
+}
+
+#[test]
+fn requires_auto_bounds_preserves_existing() {
+    let root = test_root();
+    let ctx = TestCtx::new(&root);
+    fn_with_requires_generic_existing_bounds(&ctx);
+}
+
+// ============================================================================
 // K. RESTRICTED FILE HANDLES
 // ============================================================================
 

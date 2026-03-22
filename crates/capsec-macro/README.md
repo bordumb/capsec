@@ -72,6 +72,18 @@ fn sync_data(config: &Config, ctx: &AppCtx) -> Result<()> {
 }
 ```
 
+With generic type parameters, `on = param` auto-generates `Has<P>` bounds — write your requirements once in the attribute, and the macro adds the `where` clause:
+
+```rust,ignore
+// You write:
+#[capsec::requires(fs::read, net::connect, on = ctx)]
+fn sync_data<C>(config: &Config, ctx: &C) -> Result<()> {
+    // ...
+}
+
+// Macro generates: where C: Has<FsRead> + Has<NetConnect>
+```
+
 ### `#[capsec::deny(...)]`
 
 Marks a function as capability-free. `cargo capsec audit` will promote any ambient authority call inside a `#[deny]` function to **critical** risk.
