@@ -1,0 +1,24 @@
+name: Verify Commits
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: auths-dev/auths-verify-github-action@v1
+        with:
+          allowed-signers: .auths/allowed_signers
+          fail-on-unsigned: true
+          post-pr-comment: 'true'
+          github-token: ${{ secrets.GITHUB_TOKEN }}

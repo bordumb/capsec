@@ -1,6 +1,7 @@
 # capsec
 
 [![CI](https://github.com/auths-dev/capsec/actions/workflows/ci.yml/badge.svg)](https://github.com/auths-dev/capsec/actions/workflows/ci.yml)
+[![Verify Commits](https://github.com/auths-dev/capsec/actions/workflows/verify-commits.yml/badge.svg)](https://github.com/auths-dev/capsec/actions/workflows/verify-commits.yml?query=branch%3Amain+event%3Apush)
 [![crates.io](https://img.shields.io/crates/v/capsec.svg)](https://crates.io/crates/capsec)
 [![docs.rs](https://docs.rs/capsec/badge.svg)](https://docs.rs/capsec)
 
