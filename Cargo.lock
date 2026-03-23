@@ -112,7 +112,7 @@ checksum = "1e748733b7cbc798e1434b6ac524f0c1ff2ab456fe201501e6497c8417a4fc33"
 
 [[package]]
 name = "capsec"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "capsec-core",
  "capsec-macro",
@@ -124,14 +124,14 @@ dependencies = [
 
 [[package]]
 name = "capsec-core"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "thiserror",
 ]
 
 [[package]]
 name = "capsec-macro"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -140,7 +140,7 @@ dependencies = [
 
 [[package]]
 name = "capsec-proof"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "proptest",
  "toml",
@@ -148,14 +148,14 @@ dependencies = [
 
 [[package]]
 name = "capsec-std"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "capsec-core",
 ]
 
 [[package]]
 name = "capsec-tests"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "capsec",
  "capsec-core",
@@ -167,7 +167,7 @@ dependencies = [
 
 [[package]]
 name = "capsec-tokio"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "capsec-core",
  "capsec-macro",
@@ -176,7 +176,7 @@ dependencies = [
 
 [[package]]
 name = "cargo-capsec"
-version = "0.1.9"
+version = "0.2.0"
 dependencies = [
  "capsec-core",
  "capsec-std",

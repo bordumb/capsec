@@ -1,11 +1,12 @@
 [package]
 name = "capsec-example-db"
-version.workspace = true
-edition.workspace = true
-license.workspace = true
-repository.workspace = true
+version = "0.2.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/auths-dev/capsec"
 description = "Example: user-defined database permissions with capsec"
 publish = false
+rust-version = "1.85.0"
 
 [dependencies]
 capsec = { path = "../capsec" }
