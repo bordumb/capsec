@@ -83,6 +83,6 @@ Known blind spots (documented in `capsec-tests/tests/audit_evasion.rs`):
 
 ## Reporting vulnerabilities
 
-If you discover a security issue in capsec, please email the maintainers directly rather than opening a public issue. Contact: [open an issue with the `security` label](https://github.com/bordumb/capsec/issues/new?labels=security).
+If you discover a security issue in capsec, please email the maintainers directly rather than opening a public issue. Contact: [open an issue with the `security` label](https://github.com/auths-dev/capsec/issues/new?labels=security).
 
 For issues that are not security-sensitive (e.g., audit tool false negatives, documentation gaps), please open a regular GitHub issue.

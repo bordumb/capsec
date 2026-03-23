@@ -1,6 +1,6 @@
 # capsec-macro
 
-Procedural macros for the [capsec](https://github.com/bordumb/capsec) capability-based security system.
+Procedural macros for the [capsec](https://github.com/auths-dev/capsec) capability-based security system.
 
 You probably want to depend on the `capsec` facade crate instead of using this directly — it re-exports these macros.
 

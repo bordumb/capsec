@@ -161,7 +161,7 @@ def main() -> None:
         sys.exit(1)
 
     print(f"\nDone. Release workflow will run at:")
-    print(f"  https://github.com/bordumb/capsec/actions")
+    print(f"  https://github.com/auths-dev/capsec/actions")
 
 
 if __name__ == "__main__":

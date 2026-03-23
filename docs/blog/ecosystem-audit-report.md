@@ -1,7 +1,7 @@
 # What Can Your Dependencies Do? An Ambient Authority Audit of the Rust Ecosystem
 
 **Date:** 2026-03-19
-**Tool:** [capsec](https://github.com/bordumb/capsec) — static capability audit for Rust
+**Tool:** [capsec](https://github.com/auths-dev/capsec) — static capability audit for Rust
 
 ## Introduction
 

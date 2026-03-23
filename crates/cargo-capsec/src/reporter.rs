@@ -389,8 +389,8 @@ pub fn report_sarif(
                     "text": format!("{}. Detected by capsec static analysis.", f.description)
                 },
                 "help": {
-                    "text": format!("{}\n\nSee https://github.com/bordumb/capsec for details on capability-based security in Rust.", f.description),
-                    "markdown": format!("**{}**\n\n[capsec documentation](https://github.com/bordumb/capsec)", f.description)
+                    "text": format!("{}\n\nSee https://github.com/auths-dev/capsec for details on capability-based security in Rust.", f.description),
+                    "markdown": format!("**{}**\n\n[capsec documentation](https://github.com/auths-dev/capsec)", f.description)
                 },
                 "defaultConfiguration": {
                     "level": risk_to_sarif_level(f.risk)
@@ -456,8 +456,8 @@ pub fn report_sarif(
                         "text": "A crate declared as 'pure' in [package.metadata.capsec] has ambient authority findings. Pure crates must not perform I/O."
                     },
                     "help": {
-                        "text": "Either remove the I/O operations or change the classification to 'resource'.\n\nSee https://github.com/bordumb/capsec for details.",
-                        "markdown": "**Purity violation**: either remove I/O or reclassify as `resource`.\n\n[capsec documentation](https://github.com/bordumb/capsec)"
+                        "text": "Either remove the I/O operations or change the classification to 'resource'.\n\nSee https://github.com/auths-dev/capsec for details.",
+                        "markdown": "**Purity violation**: either remove I/O or reclassify as `resource`.\n\n[capsec documentation](https://github.com/auths-dev/capsec)"
                     },
                     "defaultConfiguration": {
                         "level": "error"
@@ -493,7 +493,7 @@ pub fn report_sarif(
                     "name": "capsec-cli",
                     "version": env!("CARGO_PKG_VERSION"),
                     "semanticVersion": env!("CARGO_PKG_VERSION"),
-                    "informationUri": "https://github.com/bordumb/capsec",
+                    "informationUri": "https://github.com/auths-dev/capsec",
                     "rules": rules
                 }
             },

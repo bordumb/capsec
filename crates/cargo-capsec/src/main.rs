@@ -419,7 +419,7 @@ fn run_badge(args: BadgeArgs) {
         // Markdown badge
         let encoded_message = message.replace(' ', "%20");
         println!(
-            "[![capsec](https://img.shields.io/badge/capsec-{encoded_message}-{color})](https://github.com/bordumb/capsec)"
+            "[![capsec](https://img.shields.io/badge/capsec-{encoded_message}-{color})](https://github.com/auths-dev/capsec)"
         );
     }
 }

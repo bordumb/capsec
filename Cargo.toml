@@ -20,7 +20,7 @@ edition = "2024"
 rust-version = "1.85.0"
 readme = "README.md"
 license = "Apache-2.0"
-repository = "https://github.com/bordumb/capsec"
+repository = "https://github.com/auths-dev/capsec"
 
 [workspace.dependencies]
 # Core

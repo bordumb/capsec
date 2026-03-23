@@ -2,7 +2,7 @@
 
 Zero-cost capability tokens and permission traits for compile-time capability-based security in Rust.
 
-This is the foundation crate of the [capsec](https://github.com/bordumb/capsec) ecosystem. You probably want to depend on the `capsec` facade crate instead of using this directly.
+This is the foundation crate of the [capsec](https://github.com/auths-dev/capsec) ecosystem. You probably want to depend on the `capsec` facade crate instead of using this directly.
 
 ## What's in here
 

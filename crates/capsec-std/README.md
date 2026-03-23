@@ -2,7 +2,7 @@
 
 Capability-gated wrappers around `std::fs`, `std::net`, `std::env`, and `std::process`.
 
-This is the enforcement layer of [capsec](https://github.com/bordumb/capsec). Every function mirrors a `std` function but requires a capability token proving the caller has permission. You probably want to depend on the `capsec` facade crate instead of using this directly.
+This is the enforcement layer of [capsec](https://github.com/auths-dev/capsec). Every function mirrors a `std` function but requires a capability token proving the caller has permission. You probably want to depend on the `capsec` facade crate instead of using this directly.
 
 ## Example
 
