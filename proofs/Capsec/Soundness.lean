@@ -115,3 +115,40 @@ theorem tuple_has_first (a b : Perm) : Has [a, b] a :=
 /-- The second element of a pair is granted. -/
 theorem tuple_has_second (a b : Perm) : Has [a, b] b :=
   Has.tuple (List.mem_cons_of_mem a (List.mem_cons_self b []))
+
+-- ============================================================================
+-- 5. CapProvides — non-transitive authority
+-- ============================================================================
+
+/-- Any Has judgment lifts to CapProvides (blanket impl). -/
+theorem has_implies_cap_provides {ps : List Perm} {p : Perm} (h : Has ps p) :
+    CapProvides ps p :=
+  CapProvides.from_has h
+
+/-- A scoped capability provides its own permission. -/
+theorem cap_provides_scope_self (p : Perm) : CapProvides [p] p :=
+  CapProvides.from_scope [p] p (List.mem_cons_self p [])
+
+/-- CapProvides through scoped FsRead does not grant FsWrite. -/
+theorem cap_provides_no_escalation_fs :
+    ¬ CapProvides [Perm.fsRead] Perm.fsWrite := by
+  intro h
+  cases h with
+  | from_has hhas =>
+    cases hhas with
+    | direct => contradiction
+    | subsumes hs => cases hs
+    | ambient => contradiction
+    | tuple hm => simp [List.mem_cons, List.mem_nil_iff] at hm
+  | from_scope _ _ hm =>
+    simp [List.mem_cons, List.mem_nil_iff] at hm
+
+/-- CapProvides through FsAll does not grant NetConnect. -/
+theorem cap_provides_no_cross_leak :
+    ¬ CapProvides [Perm.fsAll] Perm.netConnect := by
+  intro h
+  cases h with
+  | from_has hhas =>
+    exact absurd hhas no_cross_leak_fs_net
+  | from_scope _ _ hm =>
+    simp [List.mem_cons, List.mem_nil_iff] at hm

@@ -63,6 +63,20 @@ impl<P: Permission, S: Scope> Attenuated<P, S> {
     }
 }
 
+// Note: Attenuated<P, S> does NOT implement Has<P> (to prevent scope bypass),
+// so the blanket CapProvider<P> impl for T: Has<P> does not apply.
+// Instead, Attenuated implements CapProvider<P> directly with scope enforcement.
+//
+// This is sound because Rust's coherence rules guarantee no overlap:
+// Attenuated never implements Has<P>, so the blanket impl cannot cover it.
+// We use a negative-impl-style guarantee by never adding Has<P> for Attenuated.
+impl<P: Permission, S: Scope> crate::cap_provider::CapProvider<P> for Attenuated<P, S> {
+    fn provide_cap(&self, target: &str) -> Result<Cap<P>, CapSecError> {
+        self.check(target)?;
+        Ok(Cap::new())
+    }
+}
+
 /// Restricts filesystem operations to a directory subtree.
 ///
 /// Paths are canonicalized before comparison to prevent `../` traversal attacks.

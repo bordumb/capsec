@@ -44,6 +44,8 @@ pub use capsec_core::root::test_root;
 
 pub use capsec_core::attenuate::{Attenuated, DirScope, HostScope, Scope};
 
+pub use capsec_core::cap_provider::CapProvider;
+
 pub use capsec_core::runtime::{Revoker, RuntimeCap, RuntimeSendCap, TimedCap, TimedSendCap};
 
 pub use capsec_core::prescript::{
@@ -120,8 +122,8 @@ pub mod tokio {
 /// ```
 pub mod prelude {
     pub use crate::{
-        Ambient, ApproverA, ApproverB, Attenuated, Cap, CapRoot, CapSecError, DirScope, DualKeyCap,
-        EnvRead, EnvWrite, FsAll, FsRead, FsWrite, Has, HostScope, LoggedCap, NetAll, NetBind,
-        NetConnect, Permission, Revoker, RuntimeCap, Spawn, Subsumes, TimedCap,
+        Ambient, ApproverA, ApproverB, Attenuated, Cap, CapProvider, CapRoot, CapSecError, DirScope,
+        DualKeyCap, EnvRead, EnvWrite, FsAll, FsRead, FsWrite, Has, HostScope, LoggedCap, NetAll,
+        NetBind, NetConnect, Permission, Revoker, RuntimeCap, Spawn, Subsumes, TimedCap,
     };
 }

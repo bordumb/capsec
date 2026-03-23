@@ -33,4 +33,8 @@ pub enum CapSecError {
     /// The capability requires multiple approvals, but not all have been granted.
     #[error("capability requires dual-key approval, but approvals are insufficient")]
     InsufficientApprovals,
+
+    /// An environment variable lookup error.
+    #[error(transparent)]
+    Env(#[from] std::env::VarError),
 }

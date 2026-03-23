@@ -41,6 +41,7 @@
 
 pub mod attenuate;
 pub mod cap;
+pub mod cap_provider;
 pub mod error;
 pub mod has;
 pub mod permission;

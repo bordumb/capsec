@@ -126,13 +126,13 @@ fn permission_inner(
 
                 impl capsec_core::has::Has<#sub> for capsec_core::cap::Cap<#struct_name> {
                     fn cap_ref(&self) -> capsec_core::cap::Cap<#sub> {
-                        capsec_core::cap::Cap::__capsec_new_derived()
+                        capsec_core::cap::Cap::__capsec_new_derived(capsec_core::__private::__capsec_seal())
                     }
                 }
 
                 impl capsec_core::has::Has<#sub> for capsec_core::cap::SendCap<#struct_name> {
                     fn cap_ref(&self) -> capsec_core::cap::Cap<#sub> {
-                        capsec_core::cap::Cap::__capsec_new_derived()
+                        capsec_core::cap::Cap::__capsec_new_derived(capsec_core::__private::__capsec_seal())
                     }
                 }
             }
