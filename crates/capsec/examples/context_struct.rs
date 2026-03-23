@@ -8,7 +8,7 @@
 //! Key concepts:
 //! - `#[capsec::context]` generates Cap fields, constructor, and Has impls
 //! - Context structs are ZSTs (all fields are zero-sized caps)
-//! - Pass `&ctx` directly to leaf functions that take `&impl Has<P>`
+//! - Pass `&ctx` directly to leaf functions that take `&impl CapProvider<P>`
 //! - For multi-threaded contexts, use `#[capsec::context(send)]`
 
 use capsec::prelude::*;
@@ -43,17 +43,17 @@ fn run_app(ctx: &AppCtx) {
     println!("Would send {} bytes to metrics server", processed.len());
 }
 
-// ─── Leaf functions: take `&impl Has<P>`, not the context ────────
+// ─── Leaf functions: take `&impl CapProvider<P>`, not the context ────────
 
-fn get_config_path(cap: &impl Has<EnvRead>) -> String {
+fn get_config_path(cap: &impl CapProvider<EnvRead>) -> String {
     capsec::env::var("APP_CONFIG", cap).unwrap_or_else(|_| "/etc/app/config.toml".into())
 }
 
-fn load_file(path: &str, cap: &impl Has<FsRead>) -> String {
+fn load_file(path: &str, cap: &impl CapProvider<FsRead>) -> String {
     capsec::fs::read_to_string(path, cap).unwrap_or_else(|_| "# default config".into())
 }
 
-fn save_output(path: &str, data: &str, cap: &impl Has<FsWrite>) {
+fn save_output(path: &str, data: &str, cap: &impl CapProvider<FsWrite>) {
     if let Err(e) = capsec::fs::write(path, data.as_bytes(), cap) {
         eprintln!("Warning: could not write {path}: {e}");
     }

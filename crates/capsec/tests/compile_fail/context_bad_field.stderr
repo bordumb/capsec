@@ -45,6 +45,29 @@ note: required by a bound in `capsec::Has`
   = note: this error originates in the attribute macro `capsec::context` (in Nightly builds, run with -Z macro-backtrace for more info)
 
 error[E0277]: the trait bound `String: Permission` is not satisfied
+ --> tests/compile_fail/context_bad_field.rs:4:1
+  |
+4 | #[capsec::context]
+  | ^^^^^^^^^^^^^^^^^^ the trait `Permission` is not implemented for `String`
+  |
+  = help: the following other types implement trait `Permission`:
+            (A, B)
+            Ambient
+            EnvRead
+            EnvWrite
+            FsAll
+            FsRead
+            FsWrite
+            NetAll
+          and $N others
+note: required by a bound in `CapProvider`
+ --> $WORKSPACE/crates/capsec-core/src/cap_provider.rs
+  |
+  | pub trait CapProvider<P: Permission> {
+  |                          ^^^^^^^^^^ required by this bound in `CapProvider`
+  = note: this error originates in the attribute macro `capsec::context` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `String: Permission` is not satisfied
  --> tests/compile_fail/context_bad_field.rs:6:8
   |
 4 | #[capsec::context]
@@ -89,3 +112,28 @@ error[E0599]: the method `cap_ref` exists for struct `Cap<String>`, but its trai
           `String: Permission`
           which is required by `Cap<String>: capsec::Has<String>`
   = note: this error originates in the attribute macro `capsec::context` (in Nightly builds, run with -Z macro-backtrace for more info)
+
+error[E0277]: the trait bound `String: Permission` is not satisfied
+ --> tests/compile_fail/context_bad_field.rs:6:8
+  |
+6 |     x: String,
+  |        ^^^^^^ the trait `Permission` is not implemented for `String`
+  |
+  = help: the following other types implement trait `Permission`:
+            (A, B)
+            Ambient
+            EnvRead
+            EnvWrite
+            FsAll
+            FsRead
+            FsWrite
+            NetAll
+          and $N others
+note: required by a bound in `cap_ref`
+ --> $WORKSPACE/crates/capsec-core/src/has.rs
+  |
+  | pub trait Has<P: Permission> {
+  |                  ^^^^^^^^^^ required by this bound in `Has::cap_ref`
+  |     /// Returns a new `Cap<P>` proving the permission is available.
+  |     fn cap_ref(&self) -> Cap<P>;
+  |        ------- required by a bound in this associated function

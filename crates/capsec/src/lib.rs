@@ -15,7 +15,7 @@
 //!     let data = load_data("/tmp/data.csv", &fs_cap).unwrap();
 //! }
 //!
-//! fn load_data(path: &str, cap: &impl Has<FsRead>) -> Result<String, capsec::CapSecError> {
+//! fn load_data(path: &str, cap: &impl CapProvider<FsRead>) -> Result<String, capsec::CapSecError> {
 //!     capsec::fs::read_to_string(path, cap)
 //! }
 //! ```
@@ -122,8 +122,9 @@ pub mod tokio {
 /// ```
 pub mod prelude {
     pub use crate::{
-        Ambient, ApproverA, ApproverB, Attenuated, Cap, CapProvider, CapRoot, CapSecError, DirScope,
-        DualKeyCap, EnvRead, EnvWrite, FsAll, FsRead, FsWrite, Has, HostScope, LoggedCap, NetAll,
-        NetBind, NetConnect, Permission, Revoker, RuntimeCap, Spawn, Subsumes, TimedCap,
+        Ambient, ApproverA, ApproverB, Attenuated, Cap, CapProvider, CapRoot, CapSecError,
+        DirScope, DualKeyCap, DualKeySendCap, EnvRead, EnvWrite, FsAll, FsRead, FsWrite, Has,
+        HostScope, LoggedCap, LoggedSendCap, NetAll, NetBind, NetConnect, Permission, Revoker,
+        RuntimeCap, RuntimeSendCap, Scope, SendCap, Spawn, Subsumes, TimedCap, TimedSendCap,
     };
 }

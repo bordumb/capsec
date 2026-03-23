@@ -30,6 +30,7 @@ use std::marker::PhantomData;
 /// // cap is a proof token — zero bytes at runtime
 /// assert_eq!(std::mem::size_of_val(&cap), 0);
 /// ```
+#[must_use = "capability tokens are proof of permission — discarding one wastes a grant"]
 pub struct Cap<P: Permission> {
     _phantom: PhantomData<P>,
     // PhantomData<*const ()> makes Cap !Send + !Sync
@@ -68,6 +69,7 @@ impl<P: Permission> Cap<P> {
     ///
     /// This is an explicit opt-in — you're acknowledging that this capability
     /// will be used in a multi-threaded context (e.g., passed into `tokio::spawn`).
+    #[must_use = "make_send consumes the original Cap and returns a SendCap"]
     pub fn make_send(self) -> SendCap<P> {
         SendCap {
             _phantom: PhantomData,
@@ -100,6 +102,7 @@ impl<P: Permission> Clone for Cap<P> {
 ///     // use cap in this thread
 /// }).join().unwrap();
 /// ```
+#[must_use = "capability tokens are proof of permission — discarding one wastes a grant"]
 pub struct SendCap<P: Permission> {
     _phantom: PhantomData<P>,
 }

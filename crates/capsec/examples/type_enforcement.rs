@@ -7,7 +7,7 @@
 //! Key concepts shown here:
 //! - `#[capsec::main]` — injects the capability root automatically
 //! - Convenience methods (`root.fs_read()`) — discoverable via IDE autocomplete
-//! - `&impl Has<P>` — function bounds that declare required permissions
+//! - `&impl CapProvider<P>` — function bounds that declare required permissions
 //! - `capsec::fs::*`, `capsec::net::*`, `capsec::process::*` — drop-in
 //!   replacements for std that require a capability argument
 //!
@@ -19,19 +19,23 @@ use std::io::Write;
 
 /// Reads configuration from disk.
 /// The `Has<FsRead>` bound makes the filesystem access visible in the signature.
-fn load_config(path: &str, cap: &impl Has<FsRead>) -> Result<String, CapSecError> {
+fn load_config(path: &str, cap: &impl CapProvider<FsRead>) -> Result<String, CapSecError> {
     capsec::fs::read_to_string(path, cap)
 }
 
 /// Writes a result file to disk.
 /// Requires `FsWrite` — cannot read files, only write them.
-fn save_result(path: &str, data: &str, cap: &impl Has<FsWrite>) -> Result<(), CapSecError> {
+fn save_result(path: &str, data: &str, cap: &impl CapProvider<FsWrite>) -> Result<(), CapSecError> {
     capsec::fs::write(path, data.as_bytes(), cap)
 }
 
 /// Opens a TCP connection and sends data.
 /// Requires `NetConnect` — cannot bind a listener or do filesystem I/O.
-fn send_report(addr: &str, data: &str, cap: &impl Has<NetConnect>) -> Result<(), CapSecError> {
+fn send_report(
+    addr: &str,
+    data: &str,
+    cap: &impl CapProvider<NetConnect>,
+) -> Result<(), CapSecError> {
     let mut stream = capsec::net::tcp_connect(addr, cap)?;
     stream.write_all(data.as_bytes())?;
     Ok(())
@@ -39,7 +43,7 @@ fn send_report(addr: &str, data: &str, cap: &impl Has<NetConnect>) -> Result<(),
 
 /// Spawns a subprocess to run cleanup.
 /// Requires `Spawn` — the most dangerous permission, isolated to just this function.
-fn run_cleanup(dir: &str, cap: &impl Has<Spawn>) -> Result<(), CapSecError> {
+fn run_cleanup(dir: &str, cap: &impl CapProvider<Spawn>) -> Result<(), CapSecError> {
     let output = capsec::process::run("rm", &["-rf", dir], cap)?;
     if !output.status.success() {
         eprintln!("cleanup failed");

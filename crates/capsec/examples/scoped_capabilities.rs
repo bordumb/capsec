@@ -12,7 +12,7 @@
 //! 2. **Capability check** — `capsec::fs::read(path, &cap)?` verifies permission
 //!
 //! Both must pass before I/O happens. This keeps capsec-std wrappers simple
-//! (`&impl Has<P>`) while still supporting fine-grained restrictions.
+//! (`&impl CapProvider<P>`) while still supporting fine-grained restrictions.
 
 use capsec::prelude::*;
 
@@ -24,7 +24,7 @@ use capsec::prelude::*;
 fn read_scoped(
     path: &str,
     scope: &Attenuated<FsRead, DirScope>,
-    cap: &impl Has<FsRead>,
+    cap: &impl CapProvider<FsRead>,
 ) -> Result<String, CapSecError> {
     // Step 1: scope gate — is this path within bounds?
     scope.check(path)?;
@@ -39,7 +39,7 @@ fn read_scoped(
 /// an unscoped copy for passing to capsec-std functions.
 fn read_from_dir(
     path: &str,
-    raw_cap: &impl Has<FsRead>,
+    raw_cap: &impl CapProvider<FsRead>,
     scope: &Attenuated<FsRead, DirScope>,
 ) -> Result<String, CapSecError> {
     scope.check(path)?;
@@ -50,7 +50,7 @@ fn read_from_dir(
 fn connect_scoped(
     addr: &str,
     scope: &Attenuated<NetConnect, HostScope>,
-    cap: &impl Has<NetConnect>,
+    cap: &impl CapProvider<NetConnect>,
 ) -> Result<std::net::TcpStream, CapSecError> {
     scope.check(addr)?;
     capsec::net::tcp_connect(addr, cap)

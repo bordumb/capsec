@@ -79,8 +79,8 @@ pub struct DiscoveryResult {
 pub fn discover_crates(
     workspace_root: &Path,
     include_deps: bool,
-    spawn_cap: &impl capsec_core::has::Has<capsec_core::permission::Spawn>,
-    _fs_cap: &impl capsec_core::has::Has<capsec_core::permission::FsRead>,
+    spawn_cap: &impl capsec_core::cap_provider::CapProvider<capsec_core::permission::Spawn>,
+    _fs_cap: &impl capsec_core::cap_provider::CapProvider<capsec_core::permission::FsRead>,
 ) -> Result<DiscoveryResult, String> {
     // Use --no-deps by default for speed (avoids resolving 300+ transitive deps).
     // Drop it when --include-deps is set so path dependencies and registry crates appear.
@@ -90,6 +90,7 @@ pub fn discover_crates(
     }
 
     let output = capsec_std::process::command("cargo", spawn_cap)
+        .map_err(|e| format!("Failed to create command: {e}"))?
         .args(&args)
         .current_dir(workspace_root)
         .output()
@@ -138,7 +139,7 @@ pub fn discover_crates(
 /// crate root (the parent of the `src/` directory).
 pub fn discover_source_files(
     dir: &Path,
-    cap: &impl capsec_core::has::Has<capsec_core::permission::FsRead>,
+    cap: &impl capsec_core::cap_provider::CapProvider<capsec_core::permission::FsRead>,
 ) -> Vec<PathBuf> {
     let mut files = Vec::new();
     discover_recursive(dir, &mut files, cap);
@@ -157,7 +158,7 @@ pub fn discover_source_files(
 fn discover_recursive(
     dir: &Path,
     files: &mut Vec<PathBuf>,
-    cap: &impl capsec_core::has::Has<capsec_core::permission::FsRead>,
+    cap: &impl capsec_core::cap_provider::CapProvider<capsec_core::permission::FsRead>,
 ) {
     let entries = match capsec_std::fs::read_dir(dir, cap) {
         Ok(e) => e,

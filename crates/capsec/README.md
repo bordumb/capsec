@@ -30,8 +30,8 @@ fn main(root: CapRoot) {
     let data = load_data("/tmp/data.csv", &ctx).unwrap();
 }
 
-// Leaf functions take &impl Has<P> — works with raw caps AND context structs
-fn load_data(path: &str, cap: &impl Has<FsRead>) -> Result<String, CapSecError> {
+// Leaf functions take &impl CapProvider<P> — works with raw caps, context structs, AND scoped caps
+fn load_data(path: &str, cap: &impl CapProvider<FsRead>) -> Result<String, CapSecError> {
     capsec::fs::read_to_string(path, cap)
 }
 ```

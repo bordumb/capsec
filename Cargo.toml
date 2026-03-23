@@ -51,7 +51,7 @@ trybuild = "1"
 insta = { version = "1", features = ["yaml"] }
 
 # Internal crates
-capsec-core = { path = "crates/capsec-core", version = "0.1.0" }
-capsec-macro = { path = "crates/capsec-macro", version = "0.1.0" }
-capsec-std = { path = "crates/capsec-std", version = "0.1.0" }
-capsec-tokio = { path = "crates/capsec-tokio", version = "0.1.0" }
+capsec-core = { path = "crates/capsec-core", version = "0.1.9" }
+capsec-macro = { path = "crates/capsec-macro", version = "0.1.9" }
+capsec-std = { path = "crates/capsec-std", version = "0.1.9" }
+capsec-tokio = { path = "crates/capsec-tokio", version = "0.1.9" }

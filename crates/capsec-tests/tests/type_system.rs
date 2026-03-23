@@ -416,7 +416,7 @@ fn requires_impl_still_works() {
 
 #[capsec_macro::requires(fs::read, on = ctx)]
 fn fn_with_requires_generic<C>(ctx: &C) {
-    let _: Cap<FsRead> = ctx.cap_ref();
+    let _: Cap<FsRead> = ctx.provide_cap("test").unwrap();
 }
 
 #[test]
@@ -428,8 +428,8 @@ fn requires_auto_bounds_single() {
 
 #[capsec_macro::requires(fs::read, net::connect, on = ctx)]
 fn fn_with_requires_generic_multi<C>(ctx: &C) {
-    let _: Cap<FsRead> = ctx.cap_ref();
-    let _: Cap<NetConnect> = ctx.cap_ref();
+    let _: Cap<FsRead> = ctx.provide_cap("test").unwrap();
+    let _: Cap<NetConnect> = ctx.provide_cap("test").unwrap();
 }
 
 #[test]
@@ -441,7 +441,7 @@ fn requires_auto_bounds_multiple() {
 
 #[capsec_macro::requires(fs::read, on = ctx)]
 fn fn_with_requires_generic_existing_bounds<C: 'static>(ctx: &C) {
-    let _: Cap<FsRead> = ctx.cap_ref();
+    let _: Cap<FsRead> = ctx.provide_cap("test").unwrap();
 }
 
 #[test]
@@ -495,7 +495,13 @@ impl Has<FsRead> for PanicForge {
     }
 }
 
-/// Proves: a diverging Has<P> impl (panic) fires BEFORE std::fs::read executes.
+impl capsec_core::cap_provider::CapProvider<FsRead> for PanicForge {
+    fn provide_cap(&self, _target: &str) -> Result<Cap<FsRead>, capsec_core::error::CapSecError> {
+        panic!("forged capability — this should fire before I/O");
+    }
+}
+
+/// Proves: a diverging CapProvider<P> impl (panic) fires BEFORE std::fs::read executes.
 /// If the _proof pattern were missing or incorrect, the I/O would run first.
 #[test]
 #[should_panic(expected = "forged capability")]

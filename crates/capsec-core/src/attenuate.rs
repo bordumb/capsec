@@ -58,6 +58,7 @@ impl<P: Permission> Cap<P> {
 
 impl<P: Permission, S: Scope> Attenuated<P, S> {
     /// Checks whether `target` is within this capability's scope.
+    #[must_use = "ignoring a scope check silently discards scope violations"]
     pub fn check(&self, target: &str) -> Result<(), CapSecError> {
         self.scope.check(target)
     }

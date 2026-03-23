@@ -35,6 +35,7 @@ static ROOT_CREATED: AtomicBool = AtomicBool::new(false);
 /// let root = test_root();
 /// let fs_cap = root.grant::<FsRead>();
 /// ```
+#[must_use = "CapRoot is a singleton — discarding it means no capabilities can be granted"]
 pub struct CapRoot {
     _private: (),
 }

@@ -19,7 +19,7 @@ There are three common patterns for using capabilities in async code.
 When your async code runs on the current task (no `tokio::spawn`), pass capabilities by reference. The scope-before-await pattern inside each wrapper keeps futures `Send` automatically.
 
 ```rust,ignore
-async fn handle_request(cap: &impl Has<FsRead>) {
+async fn handle_request(cap: &impl CapProvider<FsRead>) {
     let data = capsec::tokio::fs::read("/tmp/config.toml", cap).await?;
     // use data...
 }

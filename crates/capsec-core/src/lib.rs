@@ -8,7 +8,8 @@
 //!
 //! - [`Permission`](permission::Permission) — marker trait for capability categories
 //! - [`Cap<P>`](cap::Cap) — zero-sized proof token that the holder has permission `P`
-//! - [`Has<P>`](has::Has) — trait for checking and composing capabilities
+//! - [`Has<P>`](has::Has) — trait for infallible capability proof extraction
+//! - [`CapProvider<P>`](cap_provider::CapProvider) — trait for capability access with scope checking
 //! - [`CapRoot`](root::CapRoot) — the singleton root of all capability grants
 //! - [`Attenuated<P, S>`](attenuate::Attenuated) — scope-restricted capabilities
 //! - [`CapSecError`](error::CapSecError) — error types for scope violations and I/O

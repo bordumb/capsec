@@ -117,7 +117,7 @@ fn permission_inner(
     //   impl<P: Permission> Has<P> for SendCap<P>
     // So we only need to generate Subsumes-related Has impls.
 
-    // Generate Subsumes impls + Has<Sub> for Cap<Self>/SendCap<Self>
+    // Generate Subsumes impls + Has<Sub> + CapProvider<Sub> for Cap<Self>/SendCap<Self>
     let subsumes_impls: Vec<_> = subsumes
         .iter()
         .map(|sub| {
@@ -133,6 +133,18 @@ fn permission_inner(
                 impl capsec_core::has::Has<#sub> for capsec_core::cap::SendCap<#struct_name> {
                     fn cap_ref(&self) -> capsec_core::cap::Cap<#sub> {
                         capsec_core::cap::Cap::__capsec_new_derived(capsec_core::__private::__capsec_seal())
+                    }
+                }
+
+                impl capsec_core::cap_provider::CapProvider<#sub> for capsec_core::cap::Cap<#struct_name> {
+                    fn provide_cap(&self, _target: &str) -> Result<capsec_core::cap::Cap<#sub>, capsec_core::error::CapSecError> {
+                        Ok(capsec_core::cap::Cap::__capsec_new_derived(capsec_core::__private::__capsec_seal()))
+                    }
+                }
+
+                impl capsec_core::cap_provider::CapProvider<#sub> for capsec_core::cap::SendCap<#struct_name> {
+                    fn provide_cap(&self, _target: &str) -> Result<capsec_core::cap::Cap<#sub>, capsec_core::error::CapSecError> {
+                        Ok(capsec_core::cap::Cap::__capsec_new_derived(capsec_core::__private::__capsec_seal()))
                     }
                 }
             }
@@ -314,12 +326,12 @@ fn requires_inner(
         });
 
         if let Some(ref gen_ident) = generic_ident {
-            // Mode 4: Auto-generate Has<P> bounds on the generic type parameter
+            // Mode 4: Auto-generate CapProvider<P> bounds on the generic type parameter
             let mut sig = func.sig.clone();
             let where_clause = sig.generics.make_where_clause();
             let bounds: Vec<_> = cap_types
                 .iter()
-                .map(|perm_ty| quote! { capsec_core::has::Has<#perm_ty> })
+                .map(|perm_ty| quote! { capsec_core::cap_provider::CapProvider<#perm_ty> })
                 .collect();
             where_clause
                 .predicates
@@ -334,7 +346,7 @@ fn requires_inner(
                 .map(|(i, perm_ty)| {
                     let fn_name = format_ident!("_assert_has_{}", i);
                     quote! {
-                        fn #fn_name<T: capsec_core::has::Has<#perm_ty>>() {}
+                        fn #fn_name<T: capsec_core::cap_provider::CapProvider<#perm_ty>>() {}
                     }
                 })
                 .collect();
@@ -758,6 +770,20 @@ fn context_inner(
         })
         .collect();
 
+    // Generate CapProvider<P> impls (delegates to Has<P>)
+    let cap_provider_impls: Vec<_> = field_infos
+        .iter()
+        .map(|(_name, perm)| {
+            quote! {
+                impl capsec_core::cap_provider::CapProvider<#perm> for #struct_name {
+                    fn provide_cap(&self, _target: &str) -> Result<capsec_core::cap::Cap<#perm>, capsec_core::error::CapSecError> {
+                        Ok(<Self as capsec_core::has::Has<#perm>>::cap_ref(self))
+                    }
+                }
+            }
+        })
+        .collect();
+
     Ok(quote! {
         #(#struct_attrs)*
         #struct_vis struct #struct_name {
@@ -774,5 +800,6 @@ fn context_inner(
         }
 
         #(#has_impls)*
+        #(#cap_provider_impls)*
     })
 }

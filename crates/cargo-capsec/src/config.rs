@@ -162,7 +162,7 @@ impl DenyConfig {
 /// if the file exists but contains invalid TOML.
 pub fn load_config(
     workspace_root: &Path,
-    cap: &impl capsec_core::has::Has<capsec_core::permission::FsRead>,
+    cap: &impl capsec_core::cap_provider::CapProvider<capsec_core::permission::FsRead>,
 ) -> Result<Config, String> {
     let config_path = workspace_root.join(CONFIG_FILE);
 

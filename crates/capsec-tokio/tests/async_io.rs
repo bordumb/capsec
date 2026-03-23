@@ -113,7 +113,7 @@ async fn async_run_echo() {
 async fn async_command_returns_tokio_command() {
     let root = test_root();
     let cap = root.spawn();
-    let mut cmd = capsec_tokio::process::command("echo", &cap);
+    let mut cmd = capsec_tokio::process::command("echo", &cap).unwrap();
     let output = cmd.arg("test").output().await.unwrap();
     assert!(output.status.success());
 }

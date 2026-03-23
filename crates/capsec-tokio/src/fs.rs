@@ -5,17 +5,18 @@
 
 use crate::file::{AsyncReadFile, AsyncWriteFile};
 use capsec_core::cap::Cap;
+use capsec_core::cap_provider::CapProvider;
 use capsec_core::error::CapSecError;
-use capsec_core::has::Has;
 use capsec_core::permission::{FsRead, FsWrite};
 use std::path::Path;
 
 /// Reads the entire contents of a file into a byte vector.
 /// Requires [`FsRead`] permission.
-pub async fn read(path: impl AsRef<Path>, cap: &impl Has<FsRead>) -> Result<Vec<u8>, CapSecError> {
-    {
-        let _proof: Cap<FsRead> = cap.cap_ref();
-    }
+pub async fn read(
+    path: impl AsRef<Path>,
+    cap: &impl CapProvider<FsRead>,
+) -> Result<Vec<u8>, CapSecError> {
+    let _proof: Cap<FsRead> = cap.provide_cap(&path.as_ref().to_string_lossy())?;
     Ok(tokio::fs::read(path).await?)
 }
 
@@ -23,11 +24,9 @@ pub async fn read(path: impl AsRef<Path>, cap: &impl Has<FsRead>) -> Result<Vec<
 /// Requires [`FsRead`] permission.
 pub async fn read_to_string(
     path: impl AsRef<Path>,
-    cap: &impl Has<FsRead>,
+    cap: &impl CapProvider<FsRead>,
 ) -> Result<String, CapSecError> {
-    {
-        let _proof: Cap<FsRead> = cap.cap_ref();
-    }
+    let _proof: Cap<FsRead> = cap.provide_cap(&path.as_ref().to_string_lossy())?;
     Ok(tokio::fs::read_to_string(path).await?)
 }
 
@@ -35,11 +34,9 @@ pub async fn read_to_string(
 /// Requires [`FsRead`] permission.
 pub async fn read_dir(
     path: impl AsRef<Path>,
-    cap: &impl Has<FsRead>,
+    cap: &impl CapProvider<FsRead>,
 ) -> Result<tokio::fs::ReadDir, CapSecError> {
-    {
-        let _proof: Cap<FsRead> = cap.cap_ref();
-    }
+    let _proof: Cap<FsRead> = cap.provide_cap(&path.as_ref().to_string_lossy())?;
     Ok(tokio::fs::read_dir(path).await?)
 }
 
@@ -47,11 +44,9 @@ pub async fn read_dir(
 /// Requires [`FsRead`] permission.
 pub async fn metadata(
     path: impl AsRef<Path>,
-    cap: &impl Has<FsRead>,
+    cap: &impl CapProvider<FsRead>,
 ) -> Result<std::fs::Metadata, CapSecError> {
-    {
-        let _proof: Cap<FsRead> = cap.cap_ref();
-    }
+    let _proof: Cap<FsRead> = cap.provide_cap(&path.as_ref().to_string_lossy())?;
     Ok(tokio::fs::metadata(path).await?)
 }
 
@@ -60,11 +55,9 @@ pub async fn metadata(
 pub async fn write(
     path: impl AsRef<Path>,
     contents: impl AsRef<[u8]>,
-    cap: &impl Has<FsWrite>,
+    cap: &impl CapProvider<FsWrite>,
 ) -> Result<(), CapSecError> {
-    {
-        let _proof: Cap<FsWrite> = cap.cap_ref();
-    }
+    let _proof: Cap<FsWrite> = cap.provide_cap(&path.as_ref().to_string_lossy())?;
     Ok(tokio::fs::write(path, contents).await?)
 }
 
@@ -72,11 +65,9 @@ pub async fn write(
 /// Requires [`FsWrite`] permission.
 pub async fn create_dir_all(
     path: impl AsRef<Path>,
-    cap: &impl Has<FsWrite>,
+    cap: &impl CapProvider<FsWrite>,
 ) -> Result<(), CapSecError> {
-    {
-        let _proof: Cap<FsWrite> = cap.cap_ref();
-    }
+    let _proof: Cap<FsWrite> = cap.provide_cap(&path.as_ref().to_string_lossy())?;
     Ok(tokio::fs::create_dir_all(path).await?)
 }
 
@@ -84,11 +75,9 @@ pub async fn create_dir_all(
 /// Requires [`FsWrite`] permission.
 pub async fn remove_file(
     path: impl AsRef<Path>,
-    cap: &impl Has<FsWrite>,
+    cap: &impl CapProvider<FsWrite>,
 ) -> Result<(), CapSecError> {
-    {
-        let _proof: Cap<FsWrite> = cap.cap_ref();
-    }
+    let _proof: Cap<FsWrite> = cap.provide_cap(&path.as_ref().to_string_lossy())?;
     Ok(tokio::fs::remove_file(path).await?)
 }
 
@@ -96,38 +85,38 @@ pub async fn remove_file(
 /// Requires [`FsWrite`] permission.
 pub async fn remove_dir_all(
     path: impl AsRef<Path>,
-    cap: &impl Has<FsWrite>,
+    cap: &impl CapProvider<FsWrite>,
 ) -> Result<(), CapSecError> {
-    {
-        let _proof: Cap<FsWrite> = cap.cap_ref();
-    }
+    let _proof: Cap<FsWrite> = cap.provide_cap(&path.as_ref().to_string_lossy())?;
     Ok(tokio::fs::remove_dir_all(path).await?)
 }
 
 /// Renames a file or directory.
 /// Requires [`FsWrite`] permission.
+///
+/// Both source and destination paths are checked against the capability's scope.
 pub async fn rename(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
-    cap: &impl Has<FsWrite>,
+    cap: &impl CapProvider<FsWrite>,
 ) -> Result<(), CapSecError> {
-    {
-        let _proof: Cap<FsWrite> = cap.cap_ref();
-    }
+    let _proof: Cap<FsWrite> = cap.provide_cap(&from.as_ref().to_string_lossy())?;
+    let _proof2: Cap<FsWrite> = cap.provide_cap(&to.as_ref().to_string_lossy())?;
     Ok(tokio::fs::rename(from, to).await?)
 }
 
 /// Copies a file. Requires both [`FsRead`] and [`FsWrite`] permissions.
+///
+/// The read capability is checked against the source path, and the write
+/// capability is checked against the destination path.
 pub async fn copy(
     from: impl AsRef<Path>,
     to: impl AsRef<Path>,
-    read_cap: &impl Has<FsRead>,
-    write_cap: &impl Has<FsWrite>,
+    read_cap: &impl CapProvider<FsRead>,
+    write_cap: &impl CapProvider<FsWrite>,
 ) -> Result<u64, CapSecError> {
-    {
-        let _read_proof: Cap<FsRead> = read_cap.cap_ref();
-        let _write_proof: Cap<FsWrite> = write_cap.cap_ref();
-    }
+    let _read_proof: Cap<FsRead> = read_cap.provide_cap(&from.as_ref().to_string_lossy())?;
+    let _write_proof: Cap<FsWrite> = write_cap.provide_cap(&to.as_ref().to_string_lossy())?;
     Ok(tokio::fs::copy(from, to).await?)
 }
 
@@ -136,11 +125,9 @@ pub async fn copy(
 /// Requires [`FsRead`] permission.
 pub async fn open(
     path: impl AsRef<Path>,
-    cap: &impl Has<FsRead>,
+    cap: &impl CapProvider<FsRead>,
 ) -> Result<AsyncReadFile, CapSecError> {
-    {
-        let _proof: Cap<FsRead> = cap.cap_ref();
-    }
+    let _proof: Cap<FsRead> = cap.provide_cap(&path.as_ref().to_string_lossy())?;
     Ok(AsyncReadFile::new(tokio::fs::File::open(path).await?))
 }
 
@@ -149,10 +136,8 @@ pub async fn open(
 /// Requires [`FsWrite`] permission.
 pub async fn create(
     path: impl AsRef<Path>,
-    cap: &impl Has<FsWrite>,
+    cap: &impl CapProvider<FsWrite>,
 ) -> Result<AsyncWriteFile, CapSecError> {
-    {
-        let _proof: Cap<FsWrite> = cap.cap_ref();
-    }
+    let _proof: Cap<FsWrite> = cap.provide_cap(&path.as_ref().to_string_lossy())?;
     Ok(AsyncWriteFile::new(tokio::fs::File::create(path).await?))
 }

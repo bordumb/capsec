@@ -120,7 +120,7 @@ pub struct ExternBlock {
 /// ```
 pub fn parse_file(
     path: &Path,
-    cap: &impl capsec_core::has::Has<capsec_core::permission::FsRead>,
+    cap: &impl capsec_core::cap_provider::CapProvider<capsec_core::permission::FsRead>,
 ) -> Result<ParsedFile, String> {
     let source = capsec_std::fs::read_to_string(path, cap)
         .map_err(|e| format!("Failed to read {}: {e}", path.display()))?;

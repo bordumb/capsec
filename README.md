@@ -22,7 +22,7 @@ cargo capsec audit
 capsec fills that gap with three layers:
 
 1. **`cargo capsec audit`** — a static audit tool that scans your code and reports every I/O call. Drop it into CI and know exactly what your dependencies do.
-2. **Compile-time type system** — functions declare their I/O permissions via `Has<P>` trait bounds, and the compiler rejects anything that exceeds them. Zero runtime cost.
+2. **Compile-time type system** — functions declare their I/O permissions via `CapProvider<P>` trait bounds, and the compiler rejects anything that exceeds them. Zero runtime cost. Scoped capabilities (`Attenuated<P, S>`) enforce *where* a capability can act.
 3. **Runtime capability control** — `RuntimeCap` (revocable) and `TimedCap` (expiring) wrap static capabilities with runtime validity checks for dynamic scenarios like server init or migration windows.
 
 The audit tool finds the problems. The type system prevents them at compile time. Runtime caps handle the cases where permissions need to change dynamically.
@@ -120,15 +120,15 @@ Functions declare their I/O requirements in the type signature. The compiler enf
 use capsec::prelude::*;
 
 // Define a context with exactly the permissions your app needs.
-// The macro generates Cap fields, constructor, and Has<P> impls.
+// The macro generates Cap fields, constructor, Has<P> impls, and CapProvider<P> impls.
 #[capsec::context]
 struct AppCtx {
     fs: FsRead,
     net: NetConnect,
 }
 
-// Leaf functions take &impl Has<P> — works with raw caps AND context structs.
-pub fn load_config(path: &str, cap: &impl Has<FsRead>) -> Result<String, CapSecError> {
+// Leaf functions take &impl CapProvider<P> — works with raw caps, context structs, AND scoped caps.
+pub fn load_config(path: &str, cap: &impl CapProvider<FsRead>) -> Result<String, CapSecError> {
     capsec::fs::read_to_string(path, cap)
 }
 
@@ -157,11 +157,11 @@ let _ = capsec::fs::read_to_string("/etc/passwd", &net_cap);
 ```
 
 ```
-error[E0277]: the trait bound `Cap<NetConnect>: Has<FsRead>` is not satisfied
+error[E0277]: the trait bound `Cap<NetConnect>: CapProvider<FsRead>` is not satisfied
  --> src/main.rs:4:55
   |
 4 |     let _ = capsec::fs::read_to_string("/etc/passwd", &net_cap);
-  |             --------------------------                ^^^^^^^^ the trait `Has<FsRead>` is not implemented for `Cap<NetConnect>`
+  |             --------------------------                ^^^^^^^^ the trait `CapProvider<FsRead>` is not implemented for `Cap<NetConnect>`
   |             |
   |             required by a bound introduced by this call
 ```
@@ -189,15 +189,15 @@ help: provide the argument
 
 ```rust
 let fs_all = root.grant::<FsAll>();
-needs_net(&fs_all);  // fn needs_net(_: &impl Has<NetConnect>) {}
+needs_net(&fs_all);  // fn needs_net(_: &impl CapProvider<NetConnect>) {}
 ```
 
 ```
-error[E0277]: the trait bound `Cap<FsAll>: Has<NetConnect>` is not satisfied
+error[E0277]: the trait bound `Cap<FsAll>: CapProvider<NetConnect>` is not satisfied
  --> src/main.rs:3:15
   |
 3 |     needs_net(&fs_all);
-  |     --------- ^^^^^^^ the trait `Has<NetConnect>` is not implemented for `Cap<FsAll>`
+  |     --------- ^^^^^^^ the trait `CapProvider<NetConnect>` is not implemented for `Cap<FsAll>`
   |     |
   |     required by a bound introduced by this call
 ```
@@ -210,7 +210,7 @@ These are real `rustc` errors — no custom error framework, no runtime panics. 
 |--|--------|-------|
 | Can any function read files? | Yes | Only if it has `Cap<FsRead>` |
 | Can any function open sockets? | Yes | Only if it has `Cap<NetConnect>` |
-| Can you audit who has what access? | Grep and pray | Grep for `Has<FsRead>` |
+| Can you audit who has what access? | Grep and pray | Grep for `CapProvider<FsRead>` |
 | Runtime cost? | N/A | Zero — all types are erased at compile time |
 
 ### Security model
@@ -347,7 +347,7 @@ fn main(root: CapRoot) -> Result<(), Box<dyn std::error::Error>> {
 
 ### Key properties
 
-- `RuntimeCap`, `TimedCap`, `LoggedCap`, and `DualKeyCap` do **not** implement `Has<P>` — fallibility is explicit via `try_cap()` at every call site
+- `RuntimeCap`, `TimedCap`, `LoggedCap`, and `DualKeyCap` do **not** implement `Has<P>` but they do implement `CapProvider<P>` — so they can be passed directly to capsec-std/tokio functions. Fallibility is handled transparently by `provide_cap()`
 - All are `!Send` by default — use `make_send()` to opt into cross-thread transfer
 - Cloning a `RuntimeCap` shares the revocation flag — revoking one revokes all clones
 - Cloning a `LoggedCap` shares the audit log — entries from any clone appear in the same log
@@ -379,7 +379,7 @@ capsec's design draws from three foundational papers in capability-based securit
 
 - **Saltzer & Schroeder (1975)** — [The Protection of Information in Computer Systems](https://www.cs.virginia.edu/~evans/cs551/saltzer/). Defined the eight design principles for protection mechanisms. capsec implements six: economy of mechanism (zero-sized types), fail-safe defaults (no cap = no access), least privilege (the core mission), open design (open source + adversarial test suite), separation of privilege (`DualKeyCap`), and compromise recording (`LoggedCap`). The two partially met — complete mediation and least common mechanism — are inherent limitations of a library-level approach.
 
-- **Melicher et al. (2017)** — [A Capability-Based Module System for Authority Control](https://www.cs.cmu.edu/~aldrich/papers/ecoop17modules.pdf) (ECOOP 2017). Formalized non-transitive authority in the Wyvern language, proving that a module's authority can be determined by inspecting only its interface. capsec achieves the same property: `Has<P>` bounds make a function's authority visible in its signature, and `Attenuated<P, S>` / runtime cap types that don't implement `Has<P>` enforce non-transitivity.
+- **Melicher et al. (2017)** — [A Capability-Based Module System for Authority Control](https://www.cs.cmu.edu/~aldrich/papers/ecoop17modules.pdf) (ECOOP 2017). Formalized non-transitive authority in the Wyvern language, proving that a module's authority can be determined by inspecting only its interface. capsec achieves the same property: `CapProvider<P>` bounds make a function's authority visible in its signature, and `Attenuated<P, S>` enforces non-transitivity through scope checks embedded in `provide_cap()`.
 
 ---
 

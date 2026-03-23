@@ -28,7 +28,7 @@ async fn main(root: CapRoot) { ... }
 
 ### `#[capsec::context]`
 
-Transforms a struct with permission-type fields into a capability context. Generates `Cap<P>` fields, a `new(root)` constructor, and `Has<P>` impls for each field.
+Transforms a struct with permission-type fields into a capability context. Generates `Cap<P>` fields, a `new(root)` constructor, `Has<P>` impls, and `CapProvider<P>` impls for each field.
 
 ```rust,ignore
 #[capsec::context]
@@ -37,7 +37,7 @@ struct AppCtx {
     net: NetConnect,
 }
 
-// Generated: AppCtx::new(&root), impl Has<FsRead> for AppCtx, impl Has<NetConnect> for AppCtx
+// Generated: AppCtx::new(&root), impl Has<P> + CapProvider<P> for AppCtx (for each field)
 ```
 
 For async/threaded code, use the `send` variant to generate `SendCap<P>` fields:
@@ -63,7 +63,7 @@ fn sync_data(fs: &impl Has<FsRead>, net: &impl Has<NetConnect>) -> Result<()> {
 }
 ```
 
-With concrete context types, use `on = param` to emit a compile-time assertion that the parameter type implements `Has<P>`:
+With concrete context types, use `on = param` to emit a compile-time assertion that the parameter type implements `CapProvider<P>`:
 
 ```rust,ignore
 #[capsec::requires(fs::read, net::connect, on = ctx)]
@@ -72,7 +72,7 @@ fn sync_data(config: &Config, ctx: &AppCtx) -> Result<()> {
 }
 ```
 
-With generic type parameters, `on = param` auto-generates `Has<P>` bounds — write your requirements once in the attribute, and the macro adds the `where` clause:
+With generic type parameters, `on = param` auto-generates `CapProvider<P>` bounds — write your requirements once in the attribute, and the macro adds the `where` clause:
 
 ```rust,ignore
 // You write:
@@ -81,7 +81,7 @@ fn sync_data<C>(config: &Config, ctx: &C) -> Result<()> {
     // ...
 }
 
-// Macro generates: where C: Has<FsRead> + Has<NetConnect>
+// Macro generates: where C: CapProvider<FsRead> + CapProvider<NetConnect>
 ```
 
 ### `#[capsec::deny(...)]`

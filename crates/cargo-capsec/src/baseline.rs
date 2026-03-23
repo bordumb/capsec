@@ -87,7 +87,7 @@ pub struct DiffResult {
 /// Returns `None` if the file doesn't exist or can't be parsed.
 pub fn load_baseline(
     workspace_root: &Path,
-    cap: &impl capsec_core::has::Has<capsec_core::permission::FsRead>,
+    cap: &impl capsec_core::cap_provider::CapProvider<capsec_core::permission::FsRead>,
 ) -> Option<HashSet<BaselineEntry>> {
     let path = workspace_root.join(BASELINE_FILE);
     let data = capsec_std::fs::read_to_string(path, cap).ok()?;
@@ -98,7 +98,7 @@ pub fn load_baseline(
 pub fn save_baseline(
     workspace_root: &Path,
     findings: &[Finding],
-    cap: &impl capsec_core::has::Has<capsec_core::permission::FsWrite>,
+    cap: &impl capsec_core::cap_provider::CapProvider<capsec_core::permission::FsWrite>,
 ) -> Result<(), String> {
     let entries: Vec<BaselineEntry> = findings.iter().map(BaselineEntry::from).collect();
     let json = serde_json::to_string_pretty(&entries)

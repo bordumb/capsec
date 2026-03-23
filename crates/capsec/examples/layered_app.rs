@@ -106,8 +106,8 @@ fn sync_workflow(
 /// Business logic for the status check.
 ///
 /// Also zero capsec imports. Takes domain wrappers + a single cap
-/// for env access (leaf-level, so `&impl Has<P>` is appropriate).
-fn status_check(config: &ConfigService, env_cap: &impl Has<EnvRead>) -> String {
+/// for env access (leaf-level, so `&impl CapProvider<P>` is appropriate).
+fn status_check(config: &ConfigService, env_cap: &impl CapProvider<EnvRead>) -> String {
     let version = capsec::env::var("APP_VERSION", env_cap).unwrap_or_else(|_| "dev".into());
 
     let config_ok = config.get("app").is_some();

@@ -16,12 +16,16 @@ use capsec::prelude::*;
 
 /// This function has been migrated to capsec.
 /// The `Has<FsRead>` bound makes the filesystem access explicit.
-fn load_config(path: &str, cap: &impl Has<FsRead>) -> Result<String, CapSecError> {
+fn load_config(path: &str, cap: &impl CapProvider<FsRead>) -> Result<String, CapSecError> {
     capsec::fs::read_to_string(path, cap)
 }
 
 /// Also migrated — network access is now visible in the type signature.
-fn send_metrics(addr: &str, data: &str, cap: &impl Has<NetConnect>) -> Result<(), CapSecError> {
+fn send_metrics(
+    addr: &str,
+    data: &str,
+    cap: &impl CapProvider<NetConnect>,
+) -> Result<(), CapSecError> {
     let mut stream = capsec::net::tcp_connect(addr, cap)?;
     std::io::Write::write_all(&mut stream, data.as_bytes())?;
     Ok(())

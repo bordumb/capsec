@@ -1,20 +1,20 @@
-error[E0277]: the trait bound `Cap<capsec::NetConnect>: Has<FsRead>` is not satisfied
+error[E0277]: the trait bound `Cap<capsec::NetConnect>: CapProvider<FsRead>` is not satisfied
  --> tests/compile_fail/capsec_std_wrong_cap.rs:8:55
   |
 8 |     let _ = capsec::fs::read_to_string("/etc/passwd", &net_cap);
-  |             --------------------------                ^^^^^^^^ the trait `Has<FsRead>` is not implemented for `Cap<capsec::NetConnect>`
+  |             --------------------------                ^^^^^^^^ the trait `CapProvider<FsRead>` is not implemented for `Cap<capsec::NetConnect>`
   |             |
   |             required by a bound introduced by this call
   |
-  = help: the following other types implement trait `Has<P>`:
-            `Cap<(Ambient, Ambient)>` implements `Has<Ambient>`
-            `Cap<(Ambient, EnvRead)>` implements `Has<Ambient>`
-            `Cap<(Ambient, EnvRead)>` implements `Has<EnvRead>`
-            `Cap<(Ambient, EnvWrite)>` implements `Has<Ambient>`
-            `Cap<(Ambient, EnvWrite)>` implements `Has<EnvWrite>`
-            `Cap<(Ambient, FsAll)>` implements `Has<Ambient>`
-            `Cap<(Ambient, FsAll)>` implements `Has<FsAll>`
-            `Cap<(Ambient, FsRead)>` implements `Has<Ambient>`
+  = help: the following other types implement trait `CapProvider<P>`:
+            `Cap<(Ambient, Ambient)>` implements `CapProvider<Ambient>`
+            `Cap<(Ambient, EnvRead)>` implements `CapProvider<Ambient>`
+            `Cap<(Ambient, EnvRead)>` implements `CapProvider<EnvRead>`
+            `Cap<(Ambient, EnvWrite)>` implements `CapProvider<Ambient>`
+            `Cap<(Ambient, EnvWrite)>` implements `CapProvider<EnvWrite>`
+            `Cap<(Ambient, FsAll)>` implements `CapProvider<Ambient>`
+            `Cap<(Ambient, FsAll)>` implements `CapProvider<FsAll>`
+            `Cap<(Ambient, FsRead)>` implements `CapProvider<Ambient>`
           and $N others
 note: required by a bound in `capsec::fs::read_to_string`
  --> $WORKSPACE/crates/capsec-std/src/fs.rs
@@ -22,5 +22,5 @@ note: required by a bound in `capsec::fs::read_to_string`
   | pub fn read_to_string(
   |        -------------- required by a bound in this function
   |     path: impl AsRef<Path>,
-  |     cap: &impl Has<FsRead>,
-  |                ^^^^^^^^^^^ required by this bound in `read_to_string`
+  |     cap: &impl CapProvider<FsRead>,
+  |                ^^^^^^^^^^^^^^^^^^^ required by this bound in `read_to_string`

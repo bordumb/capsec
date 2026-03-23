@@ -16,7 +16,7 @@ let cap = root.grant::<FsRead>();
 // This works — we have a Cap<FsRead>:
 let data = capsec_std::fs::read("/tmp/data.bin", &cap).unwrap();
 
-// This won't compile — NetConnect can't satisfy Has<FsRead>:
+// This won't compile — NetConnect can't satisfy CapProvider<FsRead>:
 // let net = root.grant::<NetConnect>();
 // let data = capsec_std::fs::read("/tmp/data.bin", &net);
 ```

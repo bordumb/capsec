@@ -11,7 +11,7 @@
 //!
 //! Enable via feature flags:
 //!
-//! - `rt` — task spawning with capability transfer ([`task::spawn_with`])
+//! - `rt` — task spawning with capability transfer (`task::spawn_with`)
 //! - `fs` — async filesystem operations (`tokio::fs`)
 //! - `net` — async network operations (`tokio::net`)
 //! - `process` — async subprocess execution (`tokio::process`)
@@ -30,10 +30,10 @@
 //! wrapper keeps futures `Send` automatically.
 //!
 //! ```no_run
-//! use capsec_core::has::Has;
+//! use capsec_core::cap_provider::CapProvider;
 //! use capsec_core::permission::FsRead;
 //!
-//! async fn handle_request(cap: &impl Has<FsRead>) {
+//! async fn handle_request(cap: &impl CapProvider<FsRead>) {
 //!     let data = capsec_tokio::fs::read("/tmp/config.toml", cap).await.unwrap();
 //!     // ...
 //! }
@@ -42,7 +42,7 @@
 //! ## Pattern 2: `spawn_with` (single capability)
 //!
 //! When spawning a task that needs one capability, use
-//! [`task::spawn_with`]. It converts `Cap<P>` to `SendCap<P>` for you —
+//! `task::spawn_with`. It converts `Cap<P>` to `SendCap<P>` for you —
 //! no need to call `.make_send()` manually.
 //!
 //! ```no_run
