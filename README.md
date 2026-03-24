@@ -31,33 +31,28 @@ The audit tool finds the problems. The type system prevents them at compile time
 
 ## cargo-capsec — Static Capability Audit
 
-Scans Rust source for ambient authority (filesystem, network, env, process) and reports what your code — and your dependencies — can do to the outside world. Zero config, zero code changes.
+Scans Rust source for ambient authority (filesystem, network, env, process, FFI) and reports what your code — and your dependencies — can do to the outside world. Zero config, zero code changes.
 
 ### Install
 
 ```bash
 cargo install cargo-capsec
-
-# Or from source:
-cargo install --path crates/cargo-capsec
 ```
 
-### Run
+### Adopt in 30 seconds
 
 ```bash
-# Scan workspace crates only (fast, default)
-cargo capsec audit
+cargo capsec init
+```
 
-# Scan workspace + dependencies — cross-crate propagation shows
-# which of YOUR functions inherit authority from dependencies
-cargo capsec audit --include-deps
+Runs a full audit, generates a `.capsec.toml` that suppresses all existing findings, saves a baseline, and optionally sets up CI. You immediately start catching *new* ambient authority without drowning in legacy noise.
 
-# Control dependency depth (default: 1 = direct deps only)
-cargo capsec audit --include-deps --dep-depth 3   # up to 3 hops
-cargo capsec audit --include-deps --dep-depth 0   # unlimited
+### Audit
 
-# Supply-chain view — only dependency findings
-cargo capsec audit --deps-only
+```bash
+cargo capsec audit                        # workspace only
+cargo capsec audit --include-deps         # + cross-crate dependency propagation
+cargo capsec audit --deep --include-deps  # + MIR analysis (nightly, sees through macros)
 ```
 
 ```
@@ -66,35 +61,54 @@ my-app v0.1.0
   FS    src/config.rs:8:5     fs::read_to_string     load_config()
   NET   src/api.rs:15:9       reqwest::get            fetch_data()
         ↳ Cross-crate: reqwest::get() → TcpStream::connect [NET]
+  FFI   src/db.rs:31:9        rusqlite::execute       query()
+        ↳ Cross-crate: rusqlite::execute() → sqlite3_exec [FFI]
   PROC  src/deploy.rs:42:17   Command::new           run_migration()
-
-Summary
-───────
-  Crates with findings: 1
-  Total findings:       3
-  Categories:           FS: 1  NET: 1  ENV: 0  PROC: 1
-  1 critical-risk findings
 ```
 
-### Add to CI
+### Diff dependency versions
+
+```bash
+cargo capsec diff serde_json@1.0.130 serde_json@1.0.133
+```
+
+```
+serde_json 1.0.130 → 1.0.133
+─────────────────────────────
++ NET  src/de.rs:142:9  TcpStream::connect  fetch_schema()
+- FS   src/io.rs:88:5   fs::read            old_loader()
+
+Summary: 1 added, 1 removed, 1 unchanged
+```
+
+When Dependabot bumps a dependency, know exactly what new authority it introduced.
+
+### Compare crates
+
+```bash
+cargo capsec compare ureq@2.12.1 reqwest@0.12.12
+```
+
+Side-by-side authority profiles to make informed dependency choices.
+
+### CI
+
+```bash
+cargo capsec init --ci github   # generates .github/workflows/capsec.yml
+```
+
+Or manually:
 
 ```yaml
-# .github/workflows/capsec.yml
-name: Capability Audit
-on: [pull_request]
-jobs:
-  audit:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - run: cargo install cargo-capsec
-      - run: cargo capsec audit --fail-on high --quiet
+- run: cargo capsec audit --fail-on high --format sarif > capsec.sarif
+- uses: github/codeql-action/upload-sarif@v3
+  with:
+    sarif_file: capsec.sarif
 ```
 
-New high-risk I/O in a PR? CI fails. No new I/O? CI passes. Teams can adopt incrementally with `--baseline` and `--diff` to only flag *new* findings.
+See the [full CLI reference](crates/cargo-capsec/README.md) for all commands and flags.
 
-To see it in action, you can reference these:
+To see it in action:
 * [CI/CD](https://github.com/auths-dev/capsec/blob/main/.github/workflows/ci.yml#L57)
 * [Pre-Commit Hook](https://github.com/auths-dev/capsec/blob/main/.pre-commit-config.yaml#L32)
 

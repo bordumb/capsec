@@ -5,11 +5,13 @@ mod config;
 mod cross_crate;
 mod deep;
 mod detector;
+mod diff;
 mod discovery;
 mod export_map;
 mod init;
 mod parser;
 mod reporter;
+mod scanner;
 
 use authorities::Risk;
 use clap::Parser;
@@ -33,6 +35,17 @@ fn main() {
             exclude_tests: args.exclude_tests,
             baseline: args.baseline,
             force: args.force,
+        }),
+        Commands::Diff(args) => diff::run_diff(diff::DiffOptions {
+            left: args.left,
+            right: args.right,
+            format: args.format,
+            fail_on_new: args.fail_on_new,
+        }),
+        Commands::Compare(args) => diff::run_compare(diff::CompareOptions {
+            left: args.left,
+            right: args.right,
+            format: args.format,
         }),
     }
 }
