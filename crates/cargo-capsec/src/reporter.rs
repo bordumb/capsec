@@ -79,11 +79,7 @@ pub fn report_text(findings: &[Finding], classifications: &[ClassificationResult
                     f.function,
                 );
                 // Show cross-crate chain detail
-                println!(
-                    "        {} {}",
-                    "\u{21b3}".dimmed(),
-                    f.description.dimmed(),
-                );
+                println!("        {} {}", "\u{21b3}".dimmed(), f.description.dimmed(),);
             } else if f.is_transitive {
                 println!(
                     "  {:<5} {}:{}:{}  {:<28} {}()",

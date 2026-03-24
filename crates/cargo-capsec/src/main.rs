@@ -48,15 +48,14 @@ fn run_audit(args: AuditArgs) {
     };
 
     // Discover crates — always include deps when cross-crate scanning is active
-    let discovery =
-        match discovery::discover_crates(&path_arg, scan_deps, &spawn_cap, &fs_read) {
-            Ok(d) => d,
-            Err(e) => {
-                eprintln!("Error: {e}");
-                eprintln!("Hint: Run from a directory containing Cargo.toml, or use --path");
-                std::process::exit(2);
-            }
-        };
+    let discovery = match discovery::discover_crates(&path_arg, scan_deps, &spawn_cap, &fs_read) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Error: {e}");
+            eprintln!("Hint: Run from a directory containing Cargo.toml, or use --path");
+            std::process::exit(2);
+        }
+    };
     let workspace_root = discovery.workspace_root;
     let resolve_graph = discovery.resolve_graph;
     let all_crates = discovery.crates;
@@ -78,60 +77,61 @@ fn run_audit(args: AuditArgs) {
         // At depth=1, all deps are independent and can be scanned in parallel.
         let cache_dir = workspace_root.join(".capsec-cache");
 
-        let scan_one_dep = |krate: &discovery::CrateInfo| -> (export_map::CrateExportMap, Vec<detector::Finding>) {
-            let normalized_name = discovery::normalize_crate_name(&krate.name);
+        let scan_one_dep =
+            |krate: &discovery::CrateInfo| -> (export_map::CrateExportMap, Vec<detector::Finding>) {
+                let normalized_name = discovery::normalize_crate_name(&krate.name);
 
-            // Try loading from cache (only for registry deps)
-            if krate.is_dependency {
-                if let Some(cached) = export_map::load_cached_export_map(
-                    &cache_dir,
-                    &normalized_name,
-                    &krate.version,
-                    &fs_read,
-                ) {
+                // Try loading from cache (only for registry deps)
+                if krate.is_dependency
+                    && let Some(cached) = export_map::load_cached_export_map(
+                        &cache_dir,
+                        &normalized_name,
+                        &krate.version,
+                        &fs_read,
+                    )
+                {
                     return (cached, Vec::new());
                 }
-            }
 
-            let mut det = detector::Detector::new();
-            det.add_custom_authorities(&customs);
+                let mut det = detector::Detector::new();
+                det.add_custom_authorities(&customs);
 
-            let source_files = discovery::discover_source_files(&krate.source_dir, &fs_read);
-            let mut dep_findings = Vec::new();
-            let mut parsed_files = Vec::new();
+                let source_files = discovery::discover_source_files(&krate.source_dir, &fs_read);
+                let mut dep_findings = Vec::new();
+                let mut parsed_files = Vec::new();
 
-            for file_path in source_files {
-                match parser::parse_file(&file_path, &fs_read) {
-                    Ok(parsed) => {
-                        let findings =
-                            det.analyse(&parsed, &krate.name, &krate.version, &crate_deny);
-                        dep_findings.extend(findings);
-                        parsed_files.push(parsed);
-                    }
-                    Err(_e) => {
-                        // Silently skip unparseable files in deps
+                for file_path in source_files {
+                    match parser::parse_file(&file_path, &fs_read) {
+                        Ok(parsed) => {
+                            let findings =
+                                det.analyse(&parsed, &krate.name, &krate.version, &crate_deny);
+                            dep_findings.extend(findings);
+                            parsed_files.push(parsed);
+                        }
+                        Err(_e) => {
+                            // Silently skip unparseable files in deps
+                        }
                     }
                 }
-            }
 
-            let mut emap = export_map::build_export_map(
-                &normalized_name,
-                &krate.version,
-                &dep_findings,
-                &krate.source_dir,
-            );
+                let mut emap = export_map::build_export_map(
+                    &normalized_name,
+                    &krate.version,
+                    &dep_findings,
+                    &krate.source_dir,
+                );
 
-            // Also export extern function declarations (e.g., libgit2-sys, sqlite3-sys)
-            // so callers like git2 get cross-crate FFI findings.
-            export_map::add_extern_exports(&mut emap, &parsed_files, &krate.source_dir);
+                // Also export extern function declarations (e.g., libgit2-sys, sqlite3-sys)
+                // so callers like git2 get cross-crate FFI findings.
+                export_map::add_extern_exports(&mut emap, &parsed_files, &krate.source_dir);
 
-            // Cache for registry deps
-            if krate.is_dependency {
-                export_map::save_export_map_cache(&cache_dir, &emap, &fs_write);
-            }
+                // Cache for registry deps
+                if krate.is_dependency {
+                    export_map::save_export_map_cache(&cache_dir, &emap, &fs_write);
+                }
 
-            (emap, dep_findings)
-        };
+                (emap, dep_findings)
+            };
 
         // Scan deps — parallel at depth=1, sequential at depth>1 (needs prior maps)
         let mut export_maps = Vec::new();
@@ -140,7 +140,7 @@ fn run_audit(args: AuditArgs) {
             // All deps are independent at depth 1 — scan sequentially
             // (capsec capabilities are !Send, so rayon can't parallelize I/O;
             //  parallelism will be added when capabilities support Sync)
-            let results: Vec<_> = dep_crates.iter().map(|k| scan_one_dep(k)).collect();
+            let results: Vec<_> = dep_crates.iter().map(scan_one_dep).collect();
 
             for (emap, dep_findings) in results {
                 export_maps.push(emap);
@@ -154,16 +154,16 @@ fn run_audit(args: AuditArgs) {
                 let normalized_name = discovery::normalize_crate_name(&krate.name);
 
                 // Try cache
-                if krate.is_dependency {
-                    if let Some(cached) = export_map::load_cached_export_map(
+                if krate.is_dependency
+                    && let Some(cached) = export_map::load_cached_export_map(
                         &cache_dir,
                         &normalized_name,
                         &krate.version,
                         &fs_read,
-                    ) {
-                        export_maps.push(cached);
-                        continue;
-                    }
+                    )
+                {
+                    export_maps.push(cached);
+                    continue;
                 }
 
                 let mut det = detector::Detector::new();
@@ -216,8 +216,7 @@ fn run_audit(args: AuditArgs) {
         // Process in topological order so workspace-to-workspace findings propagate
         // (e.g., radicle-cli depends on radicle → radicle scanned first).
         if !args.deps_only {
-            let dep_customs =
-                cross_crate::export_map_to_custom_authorities(&export_maps);
+            let dep_customs = cross_crate::export_map_to_custom_authorities(&export_maps);
 
             // Determine scan order: topological if resolve graph available
             let ordered_ws_crates: Vec<&discovery::CrateInfo> =
@@ -240,9 +239,10 @@ fn run_audit(args: AuditArgs) {
                         let seen: std::collections::HashSet<&str> =
                             topo_ids.iter().map(|s| s.as_str()).collect();
                         for c in &workspace_crates {
-                            if c.package_id
+                            if !c
+                                .package_id
                                 .as_ref()
-                                .map_or(true, |id| !seen.contains(id.as_str()))
+                                .is_some_and(|id| seen.contains(id.as_str()))
                             {
                                 ordered.push(c);
                             }

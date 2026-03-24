@@ -59,6 +59,7 @@ pub struct ParsedFunction {
     /// Parsed from `#[doc = "capsec::deny(...)"]` attributes.
     pub deny_categories: Vec<String>,
     /// Best-effort visibility of this function.
+    #[allow(dead_code)]
     pub visibility: Visibility,
 }
 
@@ -627,8 +628,16 @@ mod tests {
             }
         "#;
         let parsed = parse_source(source, "test.rs").unwrap();
-        let public = parsed.functions.iter().find(|f| f.name == "public_method").unwrap();
-        let private = parsed.functions.iter().find(|f| f.name == "private_method").unwrap();
+        let public = parsed
+            .functions
+            .iter()
+            .find(|f| f.name == "public_method")
+            .unwrap();
+        let private = parsed
+            .functions
+            .iter()
+            .find(|f| f.name == "private_method")
+            .unwrap();
         assert_eq!(public.visibility, Visibility::Public);
         assert_eq!(private.visibility, Visibility::Private);
     }

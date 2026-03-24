@@ -58,6 +58,7 @@ struct Package {
 #[derive(Deserialize)]
 struct Target {
     kind: Vec<String>,
+    #[allow(dead_code)]
     name: String,
     #[allow(dead_code)]
     src_path: String,
@@ -124,13 +125,16 @@ pub fn normalize_crate_name(name: &str) -> String {
 
 /// Returns true if a package is a proc-macro crate (compile-time code, not runtime).
 fn is_proc_macro(pkg: &Package) -> bool {
-    pkg.targets.iter().any(|t| t.kind.contains(&"proc-macro".to_string()))
+    pkg.targets
+        .iter()
+        .any(|t| t.kind.contains(&"proc-macro".to_string()))
 }
 
 /// Information about a dependency edge in the resolved graph.
 #[derive(Debug, Clone)]
 pub struct DepEdge {
     /// Normalized extern crate name (underscored, handles renames).
+    #[allow(dead_code)]
     pub extern_name: String,
     /// Package ID of the dependency.
     pub pkg_id: String,
@@ -141,9 +145,7 @@ pub struct DepEdge {
 ///
 /// Returns `Err` if a cycle is detected (should not happen in a valid Cargo graph
 /// with dev-deps removed, but handled gracefully).
-pub fn topological_order(
-    resolve: &[(String, Vec<DepEdge>)],
-) -> Result<Vec<String>, String> {
+pub fn topological_order(resolve: &[(String, Vec<DepEdge>)]) -> Result<Vec<String>, String> {
     let num_nodes = resolve.len();
 
     // Build index: pkg_id -> index
@@ -252,7 +254,9 @@ pub fn extract_dep_graph(
             .iter()
             .filter(|d| {
                 // Exclude dev-dependencies (can create cycles).
-                !d.dep_kinds.iter().all(|dk| dk.kind.as_deref() == Some("dev"))
+                !d.dep_kinds
+                    .iter()
+                    .all(|dk| dk.kind.as_deref() == Some("dev"))
             })
             .filter(|d| !proc_macro_ids.contains(d.pkg.as_str()))
             .map(|d| DepEdge {
@@ -503,12 +507,7 @@ mod tests {
         // b   c
         //  \ /
         //   d
-        let graph = make_graph(&[
-            ("a", &["b", "c"]),
-            ("b", &["d"]),
-            ("c", &["d"]),
-            ("d", &[]),
-        ]);
+        let graph = make_graph(&[("a", &["b", "c"]), ("b", &["d"]), ("c", &["d"]), ("d", &[])]);
         let order = topological_order(&graph).unwrap();
         let pos = |id: &str| order.iter().position(|x| x == id).unwrap();
         assert!(pos("d") < pos("b"));

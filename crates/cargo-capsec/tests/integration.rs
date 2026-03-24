@@ -304,7 +304,10 @@ fn cross_crate_type_qualified_method_call() {
     det2.add_custom_authorities(&customs);
     let app_findings = det2.analyse(&app_parsed, "app", "0.1.0", &[]);
 
-    let query_findings: Vec<_> = app_findings.iter().filter(|f| f.function == "query").collect();
+    let query_findings: Vec<_> = app_findings
+        .iter()
+        .filter(|f| f.function == "query")
+        .collect();
     assert!(
         !query_findings.is_empty(),
         "app::query should get cross-crate finding via mydb::Connection::open(), got: {app_findings:?}"
@@ -354,7 +357,10 @@ fn cross_crate_basic_fs_propagation() {
     let app_findings = det2.analyse(&app_parsed, "app", "0.1.0", &[]);
 
     // app::load() should have a cross-crate FS finding via helper::read_file
-    let load_findings: Vec<_> = app_findings.iter().filter(|f| f.function == "load").collect();
+    let load_findings: Vec<_> = app_findings
+        .iter()
+        .filter(|f| f.function == "load")
+        .collect();
     assert!(
         !load_findings.is_empty(),
         "app::load should get cross-crate FS finding, got: {app_findings:?}"
@@ -456,10 +462,7 @@ fn cross_crate_build_script_excluded() {
     let dep_findings = det.analyse(&dep_parsed, "build_dep", "0.1.0", &[]);
 
     // lib.rs has no authority calls
-    assert!(
-        dep_findings.is_empty(),
-        "build_dep lib.rs should be clean"
-    );
+    assert!(dep_findings.is_empty(), "build_dep lib.rs should be clean");
 
     // Also scan build.rs
     let build_source = std::fs::read_to_string(
@@ -533,7 +536,10 @@ fn cross_crate_ffi_propagation() {
     det2.add_custom_authorities(&customs);
     let app_findings = det2.analyse(&app_parsed, "app", "0.1.0", &[]);
 
-    let init_findings: Vec<_> = app_findings.iter().filter(|f| f.function == "init").collect();
+    let init_findings: Vec<_> = app_findings
+        .iter()
+        .filter(|f| f.function == "init")
+        .collect();
     assert!(
         !init_findings.is_empty(),
         "app::init should get cross-crate FFI finding via ffi_dep::open_db, got: {app_findings:?}"
@@ -564,7 +570,10 @@ fn workspace_to_workspace_propagation() {
     det2.add_custom_authorities(&customs);
     let app_findings = det2.analyse(&app_parsed, "app", "0.1.0", &[]);
 
-    let init_findings: Vec<_> = app_findings.iter().filter(|f| f.function == "init").collect();
+    let init_findings: Vec<_> = app_findings
+        .iter()
+        .filter(|f| f.function == "init")
+        .collect();
     assert!(
         !init_findings.is_empty(),
         "app::init should get ws-to-ws FS finding from core_lib::read_config"

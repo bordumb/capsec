@@ -75,7 +75,12 @@ mod tests {
     fn single_export_map() {
         let map = make_export_map(
             "reqwest",
-            vec![("reqwest::get", Category::Net, Risk::High, "TcpStream::connect")],
+            vec![(
+                "reqwest::get",
+                Category::Net,
+                Risk::High,
+                "TcpStream::connect",
+            )],
         );
         let customs = export_map_to_custom_authorities(&[map]);
         assert_eq!(customs.len(), 1);
@@ -90,8 +95,18 @@ mod tests {
         let map = make_export_map(
             "tokio",
             vec![
-                ("tokio::fs::read", Category::Fs, Risk::Medium, "std::fs::read"),
-                ("tokio::net::connect", Category::Net, Risk::High, "TcpStream::connect"),
+                (
+                    "tokio::fs::read",
+                    Category::Fs,
+                    Risk::Medium,
+                    "std::fs::read",
+                ),
+                (
+                    "tokio::net::connect",
+                    Category::Net,
+                    Risk::High,
+                    "TcpStream::connect",
+                ),
             ],
         );
         let customs = export_map_to_custom_authorities(&[map]);
@@ -102,11 +117,21 @@ mod tests {
     fn multiple_crates() {
         let map1 = make_export_map(
             "reqwest",
-            vec![("reqwest::get", Category::Net, Risk::High, "TcpStream::connect")],
+            vec![(
+                "reqwest::get",
+                Category::Net,
+                Risk::High,
+                "TcpStream::connect",
+            )],
         );
         let map2 = make_export_map(
             "rusqlite",
-            vec![("rusqlite::execute", Category::Ffi, Risk::High, "extern sqlite3_exec")],
+            vec![(
+                "rusqlite::execute",
+                Category::Ffi,
+                Risk::High,
+                "extern sqlite3_exec",
+            )],
         );
         let customs = export_map_to_custom_authorities(&[map1, map2]);
         assert_eq!(customs.len(), 2);
@@ -133,7 +158,12 @@ mod tests {
     fn path_segments_split_correctly() {
         let map = make_export_map(
             "reqwest",
-            vec![("reqwest::blocking::client::get", Category::Net, Risk::High, "connect")],
+            vec![(
+                "reqwest::blocking::client::get",
+                Category::Net,
+                Risk::High,
+                "connect",
+            )],
         );
         let customs = export_map_to_custom_authorities(&[map]);
         assert_eq!(

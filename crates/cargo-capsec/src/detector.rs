@@ -266,8 +266,9 @@ impl Detector {
             // (sqlite3_exec()) and qualified calls (raw::git_repository_open()).
             if !extern_fn_names.is_empty() {
                 for (call, expanded) in func.calls.iter().zip(expanded_calls.iter()) {
-                    if let Some(last_seg) = expanded.last() {
-                        if extern_fn_names.contains(last_seg.as_str()) {
+                    if let Some(last_seg) = expanded.last()
+                        && extern_fn_names.contains(last_seg.as_str())
+                    {
                             let deny_violation =
                                 is_category_denied(&effective_deny, &Category::Ffi);
                             findings.push(Finding {
@@ -285,10 +286,7 @@ impl Detector {
                                     Risk::High
                                 },
                                 description: if deny_violation {
-                                    format!(
-                                        "DENY VIOLATION: Calls FFI function {}()",
-                                        last_seg
-                                    )
+                                    format!("DENY VIOLATION: Calls FFI function {}()", last_seg)
                                 } else {
                                     format!("Calls FFI function {}()", last_seg)
                                 },
@@ -298,7 +296,6 @@ impl Detector {
                                 is_deny_violation: deny_violation,
                                 is_transitive: false,
                             });
-                        }
                     }
                 }
             }
@@ -1299,8 +1296,14 @@ mod tests {
         let findings = detector.analyse(&parsed, "test-crate", "0.1.0", &[]);
         let extern_finding = findings.iter().find(|f| f.subcategory == "extern");
         let call_finding = findings.iter().find(|f| f.subcategory == "ffi_call");
-        assert!(extern_finding.is_some(), "Extern block finding should exist");
-        assert!(call_finding.is_some(), "Call-site FFI finding should also exist");
+        assert!(
+            extern_finding.is_some(),
+            "Extern block finding should exist"
+        );
+        assert!(
+            call_finding.is_some(),
+            "Call-site FFI finding should also exist"
+        );
     }
 
     #[test]

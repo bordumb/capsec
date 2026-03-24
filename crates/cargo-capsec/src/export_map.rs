@@ -51,10 +51,7 @@ pub fn file_to_module_path(file_path: &str, src_dir: &Path) -> Vec<String> {
         .strip_prefix(src_dir)
         .unwrap_or(Path::new(file_path));
 
-    let stem = relative
-        .file_stem()
-        .unwrap_or_default()
-        .to_string_lossy();
+    let stem = relative.file_stem().unwrap_or_default().to_string_lossy();
 
     let mut parts: Vec<String> = relative
         .parent()
@@ -176,11 +173,7 @@ pub fn add_extern_exports(
                 // Short form: crate::fn_name (for crate-scoped matching)
                 let short_key = format!("{crate_name}::{fn_name}");
                 if short_key != key {
-                    export_map
-                        .exports
-                        .entry(short_key)
-                        .or_default()
-                        .push(auth);
+                    export_map.exports.entry(short_key).or_default().push(auth);
                 }
             }
         }
@@ -282,17 +275,26 @@ mod tests {
 
     #[test]
     fn file_to_module_path_lib() {
-        assert_eq!(file_to_module_path("src/lib.rs", Path::new("src")), Vec::<String>::new());
+        assert_eq!(
+            file_to_module_path("src/lib.rs", Path::new("src")),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
     fn file_to_module_path_main() {
-        assert_eq!(file_to_module_path("src/main.rs", Path::new("src")), Vec::<String>::new());
+        assert_eq!(
+            file_to_module_path("src/main.rs", Path::new("src")),
+            Vec::<String>::new()
+        );
     }
 
     #[test]
     fn file_to_module_path_simple_module() {
-        assert_eq!(file_to_module_path("src/fs.rs", Path::new("src")), vec!["fs"]);
+        assert_eq!(
+            file_to_module_path("src/fs.rs", Path::new("src")),
+            vec!["fs"]
+        );
     }
 
     #[test]
@@ -305,12 +307,21 @@ mod tests {
 
     #[test]
     fn file_to_module_path_mod_rs() {
-        assert_eq!(file_to_module_path("src/fs/mod.rs", Path::new("src")), vec!["fs"]);
+        assert_eq!(
+            file_to_module_path("src/fs/mod.rs", Path::new("src")),
+            vec!["fs"]
+        );
     }
 
     #[test]
     fn build_export_map_basic() {
-        let findings = vec![make_finding("src/lib.rs", "read_file", "std::fs::read", Category::Fs, false)];
+        let findings = vec![make_finding(
+            "src/lib.rs",
+            "read_file",
+            "std::fs::read",
+            Category::Fs,
+            false,
+        )];
         let map = build_export_map("my_crate", "1.0.0", &findings, Path::new("src"));
         assert!(map.exports.contains_key("my_crate::read_file"));
         let auths = &map.exports["my_crate::read_file"];
@@ -321,7 +332,13 @@ mod tests {
     #[test]
     fn build_export_map_excludes_build_script() {
         let findings = vec![
-            make_finding("src/lib.rs", "read_file", "std::fs::read", Category::Fs, false),
+            make_finding(
+                "src/lib.rs",
+                "read_file",
+                "std::fs::read",
+                Category::Fs,
+                false,
+            ),
             make_finding("build.rs", "main", "std::env::var", Category::Env, true),
         ];
         let map = build_export_map("my_crate", "1.0.0", &findings, Path::new("src"));
@@ -346,7 +363,13 @@ mod tests {
     fn build_export_map_multiple_findings_same_function() {
         let findings = vec![
             make_finding("src/lib.rs", "mixed", "std::fs::read", Category::Fs, false),
-            make_finding("src/lib.rs", "mixed", "TcpStream::connect", Category::Net, false),
+            make_finding(
+                "src/lib.rs",
+                "mixed",
+                "TcpStream::connect",
+                Category::Net,
+                false,
+            ),
         ];
         let map = build_export_map("my_crate", "1.0.0", &findings, Path::new("src"));
         let auths = &map.exports["my_crate::mixed"];
@@ -361,7 +384,13 @@ mod tests {
 
     #[test]
     fn cached_export_map_round_trip() {
-        let findings = vec![make_finding("src/lib.rs", "read_file", "std::fs::read", Category::Fs, false)];
+        let findings = vec![make_finding(
+            "src/lib.rs",
+            "read_file",
+            "std::fs::read",
+            Category::Fs,
+            false,
+        )];
         let export_map = build_export_map("my_crate", "1.0.0", &findings, Path::new("src"));
         let cached = CachedExportMap {
             schema_version: EXPORT_MAP_SCHEMA_VERSION,
@@ -371,6 +400,11 @@ mod tests {
         let loaded: CachedExportMap = serde_json::from_str(&json).unwrap();
         assert_eq!(loaded.schema_version, EXPORT_MAP_SCHEMA_VERSION);
         assert_eq!(loaded.export_map.crate_name, "my_crate");
-        assert!(loaded.export_map.exports.contains_key("my_crate::read_file"));
+        assert!(
+            loaded
+                .export_map
+                .exports
+                .contains_key("my_crate::read_file")
+        );
     }
 }
