@@ -611,12 +611,7 @@ fn mir_findings_feed_into_cross_crate_propagation() {
     };
 
     // Step 2: Build export map from the MIR finding (same as main.rs does)
-    let mir_export_map = build_export_map(
-        "ffi_dep",
-        "1.0.0",
-        &[mir_finding],
-        Path::new("src"),
-    );
+    let mir_export_map = build_export_map("ffi_dep", "1.0.0", &[mir_finding], Path::new("src"));
     assert!(
         !mir_export_map.exports.is_empty(),
         "MIR finding should produce an export map entry"

@@ -6,3 +6,8 @@ crate = "capsec-std"
 
 [[allow]]
 crate = "capsec-tokio"
+
+# cargo-capsec is the CLI tool — it necessarily performs I/O to scan,
+# cache, and invoke the deep analysis driver.
+[[allow]]
+crate = "cargo-capsec"

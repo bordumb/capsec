@@ -214,8 +214,8 @@ fn run_audit(args: AuditArgs) {
 
         // ── Deep MIR analysis (runs before Phase 2 so findings feed into export maps) ──
         if args.deep {
-            let output_path = std::env::temp_dir()
-                .join(format!("capsec-deep-{}.jsonl", std::process::id()));
+            let output_path =
+                std::env::temp_dir().join(format!("capsec-deep-{}.jsonl", std::process::id()));
 
             let driver_available = capsec_std::process::command("which", &spawn_cap)
                 .ok()
@@ -278,8 +278,7 @@ fn run_audit(args: AuditArgs) {
 
                 match deep_result {
                     Some(output) if output.status.success() || output_path.exists() => {
-                        if let Ok(contents) =
-                            capsec_std::fs::read_to_string(&output_path, &fs_read)
+                        if let Ok(contents) = capsec_std::fs::read_to_string(&output_path, &fs_read)
                         {
                             for line in contents.lines() {
                                 if line.trim().is_empty() {
@@ -287,9 +286,8 @@ fn run_audit(args: AuditArgs) {
                                 }
                                 match serde_json::from_str::<detector::Finding>(line) {
                                     Ok(mut finding) => {
-                                        let normalized = discovery::normalize_crate_name(
-                                            &finding.crate_name,
-                                        );
+                                        let normalized =
+                                            discovery::normalize_crate_name(&finding.crate_name);
                                         if let Some((cargo_name, ver)) =
                                             crate_lookup.get(&normalized)
                                         {
@@ -301,9 +299,7 @@ fn run_audit(args: AuditArgs) {
                                         mir_findings.push(finding);
                                     }
                                     Err(e) => {
-                                        eprintln!(
-                                            "Warning: Failed to parse deep finding: {e}"
-                                        );
+                                        eprintln!("Warning: Failed to parse deep finding: {e}");
                                     }
                                 }
                             }
@@ -312,9 +308,7 @@ fn run_audit(args: AuditArgs) {
                     }
                     Some(output) => {
                         let stderr = String::from_utf8_lossy(&output.stderr);
-                        eprintln!(
-                            "Warning: Deep analysis failed (cargo check returned non-zero)."
-                        );
+                        eprintln!("Warning: Deep analysis failed (cargo check returned non-zero).");
                         for line in stderr
                             .lines()
                             .filter(|l| l.contains("error") || l.contains("Error"))
