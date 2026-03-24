@@ -68,6 +68,19 @@ jobs:
       - name: Build and verify proofs
         run: cd proofs && lake build
 
+  deep-driver:
+    name: Deep Analysis Driver (nightly)
+    runs-on: ubuntu-latest
+    # Only run when capsec-deep changes
+    if: contains(github.event.pull_request.title, 'deep') || contains(join(github.event.commits.*.modified, ','), 'capsec-deep')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: rustc-dev, llvm-tools
+      - run: cd crates/capsec-deep && cargo build
+      - run: cd crates/capsec-deep && CAPSEC_DEEP_DEBUG=1 cargo run -- --edition 2024 tests/fixtures/simple_fs.rs 2>&1 | grep "Found 1 findings"
+
   capsec-audit:
     name: Capability Audit
     runs-on: ubuntu-latest

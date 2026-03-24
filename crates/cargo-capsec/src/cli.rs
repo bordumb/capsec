@@ -45,6 +45,10 @@ pub enum Commands {
     Badge(BadgeArgs),
     /// Bootstrap capsec for an existing codebase
     Init(InitArgs),
+    /// Compare capability profiles between two crate versions
+    Diff(DiffArgs),
+    /// Compare capability profiles of two different crates
+    Compare(CompareArgs),
 }
 
 #[derive(clap::Args)]
@@ -170,4 +174,34 @@ pub struct InitArgs {
     /// Overwrite existing .capsec.toml
     #[arg(long)]
     pub force: bool,
+}
+
+#[derive(clap::Args)]
+pub struct DiffArgs {
+    /// First crate specifier: name@version
+    pub left: String,
+
+    /// Second crate specifier: name@version
+    pub right: String,
+
+    /// Output format
+    #[arg(short, long, default_value = "text", value_parser = ["text", "json"])]
+    pub format: String,
+
+    /// Fail (exit 1) if new findings were added
+    #[arg(long)]
+    pub fail_on_new: bool,
+}
+
+#[derive(clap::Args)]
+pub struct CompareArgs {
+    /// First crate: name or name@version
+    pub left: String,
+
+    /// Second crate: name or name@version
+    pub right: String,
+
+    /// Output format
+    #[arg(short, long, default_value = "text", value_parser = ["text", "json"])]
+    pub format: String,
 }
