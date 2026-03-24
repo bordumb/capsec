@@ -10,3 +10,4 @@ categories = ["rust-patterns"]
 
 [dependencies]
 capsec-core.workspace = true
+

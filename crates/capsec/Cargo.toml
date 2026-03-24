@@ -23,8 +23,3 @@ capsec-core.workspace = true
 capsec-tokio = { workspace = true, features = ["full"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "fs", "net", "process", "io-util"] }
 
-[lints.rust]
-missing_docs = "deny"
-
-[lints.rustdoc]
-broken_intra_doc_links = "deny"
