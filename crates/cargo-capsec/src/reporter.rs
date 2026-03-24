@@ -543,17 +543,10 @@ fn risk_to_security_severity(risk: Risk) -> String {
 
 /// Strips `workspace_root` prefix from a file path to produce a repo-relative URI.
 fn make_relative(file_path: &str, workspace_root: &Path) -> String {
-    let root_str = workspace_root.to_string_lossy();
-    let root_prefix = if root_str.ends_with('/') {
-        root_str.to_string()
-    } else {
-        format!("{root_str}/")
-    };
-    if file_path.starts_with(&root_prefix) {
-        file_path[root_prefix.len()..].to_string()
-    } else {
-        file_path.to_string()
-    }
+    Path::new(file_path)
+        .strip_prefix(workspace_root)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| file_path.to_string())
 }
 
 /// Maps risk to SARIF precision (how confident we are in the finding).

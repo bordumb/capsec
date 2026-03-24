@@ -277,26 +277,58 @@ pub fn resolve_classification(
     cargo_toml_classification
 }
 
+/// Pre-compiled exclude patterns for efficient repeated matching.
+#[allow(dead_code)]
+pub struct CompiledExcludes {
+    set: globset::GlobSet,
+}
+
+#[allow(dead_code)]
+impl CompiledExcludes {
+    /// Compiles exclude patterns once. Invalid patterns are silently skipped.
+    pub fn new(patterns: &[String]) -> Self {
+        let mut builder = globset::GlobSetBuilder::new();
+        for p in patterns {
+            if let Ok(glob) = globset::Glob::new(p) {
+                builder.add(glob);
+            }
+        }
+        Self {
+            set: builder
+                .build()
+                .unwrap_or_else(|_| globset::GlobSetBuilder::new().build().unwrap()),
+        }
+    }
+
+    /// Returns `true` if a file path matches any compiled exclude pattern.
+    pub fn is_excluded(&self, path: &Path) -> bool {
+        let path_str = path.display().to_string();
+        self.set.is_match(&path_str)
+            || path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|name| self.set.is_match(name))
+    }
+}
+
 /// Returns `true` if a file path matches any `[analysis].exclude` glob pattern.
 ///
 /// Uses the [`globset`] crate for correct glob semantics (supports `**`, `*`,
 /// `?`, and character classes).
 pub fn should_exclude(path: &Path, excludes: &[String]) -> bool {
     let path_str = path.display().to_string();
-    excludes.iter().any(|pattern| {
-        match globset::Glob::new(pattern) {
+    excludes
+        .iter()
+        .any(|pattern| match globset::Glob::new(pattern) {
             Ok(glob) => match glob.compile_matcher().is_match(&path_str) {
                 true => true,
-                false => {
-                    // Also try matching against just the file name for simple patterns
-                    path.file_name()
-                        .and_then(|n| n.to_str())
-                        .is_some_and(|name| glob.compile_matcher().is_match(name))
-                }
+                false => path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|name| glob.compile_matcher().is_match(name)),
             },
             Err(_) => path_str.contains(pattern),
-        }
-    })
+        })
 }
 
 #[cfg(test)]

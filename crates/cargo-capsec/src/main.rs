@@ -3,6 +3,7 @@ mod baseline;
 mod cli;
 mod config;
 mod cross_crate;
+mod deep;
 mod detector;
 mod discovery;
 mod export_map;
@@ -214,156 +215,25 @@ fn run_audit(args: AuditArgs) {
 
         // ── Deep MIR analysis (runs before Phase 2 so findings feed into export maps) ──
         if args.deep {
-            let output_path =
-                std::env::temp_dir().join(format!("capsec-deep-{}.jsonl", std::process::id()));
-
-            let driver_available = capsec_std::process::command("which", &spawn_cap)
-                .ok()
-                .and_then(|mut cmd| cmd.arg("capsec-driver").output().ok())
-                .map(|o| o.status.success())
-                .unwrap_or(false);
-
-            if !driver_available {
-                eprintln!("Error: --deep requires capsec-driver (MIR analysis driver).");
-                eprintln!("Install with: cd crates/capsec-deep && cargo install --path .");
-                eprintln!("Continuing with syntactic-only analysis...");
-            } else {
-                let deep_target_dir = workspace_root.join("target/capsec-deep");
-                let toolchain = {
-                    let pinned = "nightly-2026-02-17";
-                    let has_pinned = capsec_std::process::command("rustup", &spawn_cap)
-                        .ok()
-                        .and_then(|mut cmd| {
-                            cmd.arg("run")
-                                .arg(pinned)
-                                .arg("rustc")
-                                .arg("--version")
-                                .output()
-                                .ok()
-                        })
-                        .map(|o| o.status.success())
-                        .unwrap_or(false);
-                    if has_pinned { pinned } else { "nightly" }
-                };
-
-                let _ = std::fs::remove_dir_all(&deep_target_dir);
-
-                let deep_result = capsec_std::process::command("cargo", &spawn_cap)
-                    .ok()
-                    .and_then(|mut cmd| {
-                        cmd.arg("check")
-                            .current_dir(&path_arg)
-                            .env("RUSTC_WRAPPER", "capsec-driver")
-                            .env("CAPSEC_DEEP_OUTPUT", &output_path)
-                            .env("CAPSEC_CRATE_VERSION", "0.0.0")
-                            .env("CARGO_TARGET_DIR", &deep_target_dir)
-                            .env("RUSTUP_TOOLCHAIN", toolchain)
-                            .output()
-                            .ok()
-                    });
-
-                // Build name/version lookup for patching MIR findings
-                let crate_lookup: HashMap<String, (String, String)> = workspace_crates
-                    .iter()
-                    .chain(dep_crates.iter())
-                    .map(|c| {
-                        (
-                            discovery::normalize_crate_name(&c.name),
-                            (c.name.clone(), c.version.clone()),
-                        )
-                    })
-                    .collect();
-
-                let mut mir_findings: Vec<detector::Finding> = Vec::new();
-
-                match deep_result {
-                    Some(output) if output.status.success() || output_path.exists() => {
-                        if let Ok(contents) = capsec_std::fs::read_to_string(&output_path, &fs_read)
-                        {
-                            for line in contents.lines() {
-                                if line.trim().is_empty() {
-                                    continue;
-                                }
-                                match serde_json::from_str::<detector::Finding>(line) {
-                                    Ok(mut finding) => {
-                                        let normalized =
-                                            discovery::normalize_crate_name(&finding.crate_name);
-                                        if let Some((cargo_name, ver)) =
-                                            crate_lookup.get(&normalized)
-                                        {
-                                            finding.crate_name = cargo_name.clone();
-                                            if finding.crate_version == "0.0.0" {
-                                                finding.crate_version = ver.clone();
-                                            }
-                                        }
-                                        mir_findings.push(finding);
-                                    }
-                                    Err(e) => {
-                                        eprintln!("Warning: Failed to parse deep finding: {e}");
-                                    }
-                                }
-                            }
-                        }
-                        let _ = std::fs::remove_file(&output_path);
-                    }
-                    Some(output) => {
-                        let stderr = String::from_utf8_lossy(&output.stderr);
-                        eprintln!("Warning: Deep analysis failed (cargo check returned non-zero).");
-                        for line in stderr
-                            .lines()
-                            .filter(|l| l.contains("error") || l.contains("Error"))
-                            .take(5)
-                        {
-                            eprintln!("  {line}");
-                        }
-                        if stderr.contains("incompatible version of rustc") {
-                            eprintln!(
-                                "  Hint: try `rm -rf target/capsec-deep` to clear stale artifacts."
-                            );
-                        }
-                        eprintln!("Continuing with syntactic-only findings.");
-                    }
-                    None => {
-                        eprintln!("Warning: Could not invoke cargo check for deep analysis.");
-                        eprintln!("Continuing with syntactic-only findings.");
-                    }
-                }
-
-                if !mir_findings.is_empty() {
-                    eprintln!(
-                        "Deep analysis: {} MIR-level findings. Building export maps...",
-                        mir_findings.len()
-                    );
-
-                    // Build export maps from MIR findings so they propagate to Phase 2
-                    let mut mir_by_crate: HashMap<String, Vec<detector::Finding>> = HashMap::new();
-                    for f in &mir_findings {
-                        mir_by_crate
-                            .entry(f.crate_name.clone())
-                            .or_default()
-                            .push(f.clone());
-                    }
-                    for (crate_name, findings) in &mir_by_crate {
-                        let normalized = discovery::normalize_crate_name(crate_name);
-                        let src_dir = dep_crates
-                            .iter()
-                            .chain(workspace_crates.iter())
-                            .find(|c| discovery::normalize_crate_name(&c.name) == normalized)
-                            .map(|c| c.source_dir.clone())
-                            .unwrap_or_default();
-                        let mir_emap = export_map::build_export_map(
-                            &normalized,
-                            &findings[0].crate_version,
-                            findings,
-                            &src_dir,
-                        );
-                        export_maps.push(mir_emap);
-                    }
-
-                    // Add MIR findings to the main collection
-                    all_findings.extend(mir_findings);
-                }
+            let deep_result = deep::run_deep_analysis(
+                &path_arg,
+                &workspace_root,
+                &workspace_crates,
+                &dep_crates,
+                &fs_read,
+                &spawn_cap,
+            );
+            for warning in &deep_result.warnings {
+                eprintln!("Warning: {warning}");
             }
+            if !deep_result.findings.is_empty() {
+                eprintln!(
+                    "Deep analysis: {} MIR-level findings. Building export maps...",
+                    deep_result.findings.len()
+                );
+            }
+            export_maps.extend(deep_result.export_maps);
+            all_findings.extend(deep_result.findings);
         }
 
         // Phase 2: Scan workspace crates with dependency export maps injected.
@@ -854,15 +724,8 @@ fn run_badge(args: BadgeArgs) {
 }
 
 fn make_relative(file_path: &str, workspace_root: &Path) -> String {
-    let root_str = workspace_root.to_string_lossy();
-    let root_prefix = if root_str.ends_with('/') {
-        root_str.to_string()
-    } else {
-        format!("{root_str}/")
-    };
-    if file_path.starts_with(&root_prefix) {
-        file_path[root_prefix.len()..].to_string()
-    } else {
-        file_path.to_string()
-    }
+    Path::new(file_path)
+        .strip_prefix(workspace_root)
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| file_path.to_string())
 }

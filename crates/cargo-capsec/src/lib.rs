@@ -46,6 +46,7 @@ pub mod authorities;
 pub mod baseline;
 pub mod config;
 pub mod cross_crate;
+pub mod deep;
 pub mod detector;
 pub mod discovery;
 pub mod export_map;
