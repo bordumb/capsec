@@ -359,10 +359,8 @@ fn run_audit(args: AuditArgs) {
 
     // ── Deep MIR analysis (optional, requires nightly + capsec-driver) ──
     if args.deep {
-        let output_path = std::env::temp_dir().join(format!(
-            "capsec-deep-{}.jsonl",
-            std::process::id()
-        ));
+        let output_path =
+            std::env::temp_dir().join(format!("capsec-deep-{}.jsonl", std::process::id()));
 
         // Check if capsec-driver is available
         let driver_check = capsec_std::process::command("capsec-driver", &spawn_cap)
@@ -405,8 +403,12 @@ fn run_audit(args: AuditArgs) {
             let has_pinned = capsec_std::process::command("rustup", &spawn_cap)
                 .ok()
                 .and_then(|mut cmd| {
-                    cmd.arg("run").arg(pinned).arg("rustc").arg("--version")
-                        .output().ok()
+                    cmd.arg("run")
+                        .arg(pinned)
+                        .arg("rustc")
+                        .arg("--version")
+                        .output()
+                        .ok()
                 })
                 .map(|o| o.status.success())
                 .unwrap_or(false);
@@ -442,10 +444,12 @@ fn run_audit(args: AuditArgs) {
                 let crate_lookup: HashMap<String, (String, String)> = workspace_crates
                     .iter()
                     .chain(dep_crates.iter())
-                    .map(|c| (
-                        discovery::normalize_crate_name(&c.name),
-                        (c.name.clone(), c.version.clone()),
-                    ))
+                    .map(|c| {
+                        (
+                            discovery::normalize_crate_name(&c.name),
+                            (c.name.clone(), c.version.clone()),
+                        )
+                    })
                     .collect();
 
                 // Read JSONL findings
@@ -459,7 +463,8 @@ fn run_audit(args: AuditArgs) {
                             Ok(mut finding) => {
                                 // Patch crate name and version: MIR driver uses rustc
                                 // identifiers (underscored) and doesn't know Cargo versions.
-                                let normalized = discovery::normalize_crate_name(&finding.crate_name);
+                                let normalized =
+                                    discovery::normalize_crate_name(&finding.crate_name);
                                 if let Some((cargo_name, ver)) = crate_lookup.get(&normalized) {
                                     finding.crate_name = cargo_name.clone();
                                     if finding.crate_version == "0.0.0" {
@@ -485,7 +490,11 @@ fn run_audit(args: AuditArgs) {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 eprintln!("Warning: Deep analysis failed (cargo check returned non-zero).");
                 // Show last few meaningful error lines
-                for line in stderr.lines().filter(|l| l.contains("error") || l.contains("Error")).take(5) {
+                for line in stderr
+                    .lines()
+                    .filter(|l| l.contains("error") || l.contains("Error"))
+                    .take(5)
+                {
                     eprintln!("  {line}");
                 }
                 if stderr.contains("incompatible version of rustc") {
