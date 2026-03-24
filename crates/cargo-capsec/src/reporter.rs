@@ -67,6 +67,23 @@ pub fn report_text(findings: &[Finding], classifications: &[ClassificationResult
                     f.call_text.bold(),
                     f.function,
                 );
+            } else if f.description.starts_with("Cross-crate:") {
+                let colored_cat = colorize_category(&f.category);
+                println!(
+                    "  {:<5} {}:{}:{}  {:<28} {}()",
+                    colored_cat,
+                    f.file.dimmed(),
+                    f.call_line,
+                    f.call_col,
+                    f.call_text.bold(),
+                    f.function,
+                );
+                // Show cross-crate chain detail
+                println!(
+                    "        {} {}",
+                    "\u{21b3}".dimmed(),
+                    f.description.dimmed(),
+                );
             } else if f.is_transitive {
                 println!(
                     "  {:<5} {}:{}:{}  {:<28} {}()",
@@ -252,6 +269,9 @@ pub struct JsonFinding {
     pub is_deny_violation: bool,
     /// Whether this finding was propagated through the intra-file call graph.
     pub is_transitive: bool,
+    /// Cross-crate chain description, if this finding was propagated from a dependency.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cross_crate_chain: Option<String>,
 }
 
 /// Aggregate statistics in the JSON report.
@@ -325,6 +345,12 @@ pub fn report_json(findings: &[Finding], classifications: &[ClassificationResult
 }
 
 fn finding_to_json(f: &Finding) -> JsonFinding {
+    let cross_crate_chain = if f.description.starts_with("Cross-crate:") {
+        Some(f.description.clone())
+    } else {
+        None
+    };
+
     JsonFinding {
         file: f.file.clone(),
         function: f.function.clone(),
@@ -338,6 +364,7 @@ fn finding_to_json(f: &Finding) -> JsonFinding {
         is_build_script: f.is_build_script,
         is_deny_violation: f.is_deny_violation,
         is_transitive: f.is_transitive,
+        cross_crate_chain,
     }
 }
 

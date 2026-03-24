@@ -144,6 +144,13 @@ impl Detector {
         let mut findings = Vec::new();
         let (import_map, glob_prefixes) = build_import_map(&file.use_imports);
 
+        // Build file-scoped set of extern function names for FFI call-site detection
+        let extern_fn_names: HashSet<&str> = file
+            .extern_blocks
+            .iter()
+            .flat_map(|ext| ext.functions.iter().map(String::as_str))
+            .collect();
+
         for func in &file.functions {
             let effective_deny = merge_deny(&func.deny_categories, crate_deny);
 
@@ -247,6 +254,50 @@ impl Detector {
                                 &effective_deny,
                             ));
                             break;
+                        }
+                    }
+                }
+            }
+
+            // Pass 3: FFI call-site detection.
+            // Flag calls TO extern-declared functions (e.g., git_repository_open,
+            // sqlite3_exec). The last segment of the expanded path is checked against
+            // all extern function names from this file. This catches both direct calls
+            // (sqlite3_exec()) and qualified calls (raw::git_repository_open()).
+            if !extern_fn_names.is_empty() {
+                for (call, expanded) in func.calls.iter().zip(expanded_calls.iter()) {
+                    if let Some(last_seg) = expanded.last() {
+                        if extern_fn_names.contains(last_seg.as_str()) {
+                            let deny_violation =
+                                is_category_denied(&effective_deny, &Category::Ffi);
+                            findings.push(Finding {
+                                file: file.path.clone(),
+                                function: func.name.clone(),
+                                function_line: func.line,
+                                call_line: call.line,
+                                call_col: call.col,
+                                call_text: expanded.join("::"),
+                                category: Category::Ffi,
+                                subcategory: "ffi_call".to_string(),
+                                risk: if deny_violation {
+                                    Risk::Critical
+                                } else {
+                                    Risk::High
+                                },
+                                description: if deny_violation {
+                                    format!(
+                                        "DENY VIOLATION: Calls FFI function {}()",
+                                        last_seg
+                                    )
+                                } else {
+                                    format!("Calls FFI function {}()", last_seg)
+                                },
+                                is_build_script: func.is_build_script,
+                                crate_name: crate_name.to_string(),
+                                crate_version: crate_version.to_string(),
+                                is_deny_violation: deny_violation,
+                                is_transitive: false,
+                            });
                         }
                     }
                 }
@@ -623,11 +674,30 @@ fn matches_custom_path(expanded_path: &[String], pattern: &[String]) -> bool {
     if expanded_path.len() < pattern.len() {
         return false;
     }
+    // Standard suffix matching
     let offset = expanded_path.len() - pattern.len();
-    expanded_path[offset..]
+    let suffix_match = expanded_path[offset..]
         .iter()
         .zip(pattern.iter())
-        .all(|(a, b)| a == b)
+        .all(|(a, b)| a == b);
+    if suffix_match {
+        return true;
+    }
+
+    // Crate-scoped matching for cross-crate authorities:
+    // Pattern ["crate_name", "func"] matches expanded ["crate_name", "Type", "func"]
+    // or ["crate_name", "module", "Type", "func"]. This handles type-qualified
+    // calls like `git2::Repository::open()` where the module path and type name
+    // don't align with the file-path-derived export map keys.
+    if pattern.len() == 2 && expanded_path.len() >= 2 {
+        let crate_matches = expanded_path[0] == pattern[0];
+        let func_matches = expanded_path.last() == pattern.last();
+        if crate_matches && func_matches {
+            return true;
+        }
+    }
+
+    false
 }
 
 #[cfg(test)]
@@ -1162,6 +1232,94 @@ mod tests {
         assert!(
             findings.is_empty(),
             "call to function not in file should not propagate"
+        );
+    }
+
+    // ── FFI call-site detection tests ──
+
+    #[test]
+    fn detect_ffi_call_to_extern_function() {
+        let source = r#"
+            extern "C" {
+                fn sqlite3_exec(db: *mut u8, sql: *const u8) -> i32;
+            }
+            fn run_query() {
+                unsafe { sqlite3_exec(std::ptr::null_mut(), std::ptr::null()); }
+            }
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        let detector = Detector::new();
+        let findings = detector.analyse(&parsed, "test-crate", "0.1.0", &[]);
+        let ffi_call: Vec<_> = findings
+            .iter()
+            .filter(|f| f.function == "run_query" && f.subcategory == "ffi_call")
+            .collect();
+        assert!(
+            !ffi_call.is_empty(),
+            "run_query should get FFI finding for calling sqlite3_exec"
+        );
+        assert_eq!(ffi_call[0].category, Category::Ffi);
+    }
+
+    #[test]
+    fn detect_ffi_call_bare_name() {
+        let source = r#"
+            extern "C" {
+                fn open(path: *const u8, flags: i32) -> i32;
+            }
+            fn opener() {
+                unsafe { open(std::ptr::null(), 0); }
+            }
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        let detector = Detector::new();
+        let findings = detector.analyse(&parsed, "test-crate", "0.1.0", &[]);
+        let ffi_call: Vec<_> = findings
+            .iter()
+            .filter(|f| f.function == "opener" && f.subcategory == "ffi_call")
+            .collect();
+        assert!(
+            !ffi_call.is_empty(),
+            "opener should get FFI finding for calling extern fn open"
+        );
+    }
+
+    #[test]
+    fn ffi_call_coexists_with_extern_block_finding() {
+        let source = r#"
+            extern "C" {
+                fn do_thing(x: i32) -> i32;
+            }
+            fn caller() {
+                unsafe { do_thing(42); }
+            }
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        let detector = Detector::new();
+        let findings = detector.analyse(&parsed, "test-crate", "0.1.0", &[]);
+        let extern_finding = findings.iter().find(|f| f.subcategory == "extern");
+        let call_finding = findings.iter().find(|f| f.subcategory == "ffi_call");
+        assert!(extern_finding.is_some(), "Extern block finding should exist");
+        assert!(call_finding.is_some(), "Call-site FFI finding should also exist");
+    }
+
+    #[test]
+    fn ffi_call_not_triggered_without_extern_block() {
+        let source = r#"
+            fn caller() {
+                some_function(42);
+            }
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        let detector = Detector::new();
+        let findings = detector.analyse(&parsed, "test-crate", "0.1.0", &[]);
+        let ffi_findings: Vec<_> = findings
+            .iter()
+            .filter(|f| f.subcategory == "ffi_call")
+            .collect();
+        assert!(
+            ffi_findings.is_empty(),
+            "No FFI call findings without extern block"
         );
     }
 }

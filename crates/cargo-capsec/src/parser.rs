@@ -28,6 +28,22 @@ pub struct ParsedFile {
     pub extern_blocks: Vec<ExternBlock>,
 }
 
+/// Extracted visibility for a parsed function.
+///
+/// Best-effort heuristic — tracks `pub`, `pub(crate)`, and private functions.
+/// Does not resolve `pub use` re-exports or trait method visibility.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Visibility {
+    /// `pub fn` — visible to downstream crates.
+    Public,
+    /// `pub(crate) fn` — visible within the crate only.
+    CratePub,
+    /// `pub(super) fn`, `pub(in path) fn`, or other restricted visibility.
+    Restricted,
+    /// No `pub` keyword — private.
+    Private,
+}
+
 /// A single function (free, `impl` method, or trait default method) and its call sites.
 #[derive(Debug, Clone)]
 pub struct ParsedFunction {
@@ -42,6 +58,8 @@ pub struct ParsedFunction {
     /// Categories denied by `#[capsec::deny(...)]` on this function.
     /// Parsed from `#[doc = "capsec::deny(...)"]` attributes.
     pub deny_categories: Vec<String>,
+    /// Best-effort visibility of this function.
+    pub visibility: Visibility,
 }
 
 /// A single call expression inside a function body.
@@ -178,6 +196,7 @@ impl<'ast> Visit<'ast> for FileVisitor {
             calls: Vec::new(),
             is_build_script: self.file_path.ends_with("build.rs") && node.sig.ident == "main",
             deny_categories: extract_deny_categories(&node.attrs),
+            visibility: extract_visibility(&node.vis),
         };
 
         let prev = self.current_function.take();
@@ -198,6 +217,7 @@ impl<'ast> Visit<'ast> for FileVisitor {
             calls: Vec::new(),
             is_build_script: false,
             deny_categories: extract_deny_categories(&node.attrs),
+            visibility: extract_visibility(&node.vis),
         };
 
         let prev = self.current_function.take();
@@ -220,6 +240,8 @@ impl<'ast> Visit<'ast> for FileVisitor {
                 calls: Vec::new(),
                 is_build_script: false,
                 deny_categories: extract_deny_categories(&node.attrs),
+                // Trait methods are effectively public if the trait is public
+                visibility: Visibility::Public,
             };
 
             let prev = self.current_function.take();
@@ -348,6 +370,22 @@ fn extract_deny_categories(attrs: &[syn::Attribute]) -> Vec<String> {
         }
     }
     categories
+}
+
+/// Extracts the visibility from a `syn::Visibility`.
+fn extract_visibility(vis: &syn::Visibility) -> Visibility {
+    match vis {
+        syn::Visibility::Public(_) => Visibility::Public,
+        syn::Visibility::Restricted(r) => {
+            // pub(crate), pub(super), pub(in path)
+            if r.path.is_ident("crate") {
+                Visibility::CratePub
+            } else {
+                Visibility::Restricted
+            }
+        }
+        syn::Visibility::Inherited => Visibility::Private,
+    }
 }
 
 fn collect_use_paths(tree: &syn::UseTree, prefix: &mut Vec<String>, out: &mut Vec<ImportPath>) {
@@ -550,6 +588,49 @@ mod tests {
         "#;
         let parsed = parse_source(source, "test.rs").unwrap();
         assert!(parsed.functions[0].deny_categories.is_empty());
+    }
+
+    #[test]
+    fn parse_visibility_public() {
+        let source = r#"
+            pub fn public_func() {}
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        assert_eq!(parsed.functions[0].visibility, Visibility::Public);
+    }
+
+    #[test]
+    fn parse_visibility_private() {
+        let source = r#"
+            fn private_func() {}
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        assert_eq!(parsed.functions[0].visibility, Visibility::Private);
+    }
+
+    #[test]
+    fn parse_visibility_crate_pub() {
+        let source = r#"
+            pub(crate) fn crate_func() {}
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        assert_eq!(parsed.functions[0].visibility, Visibility::CratePub);
+    }
+
+    #[test]
+    fn parse_visibility_impl_method() {
+        let source = r#"
+            struct Foo;
+            impl Foo {
+                pub fn public_method(&self) {}
+                fn private_method(&self) {}
+            }
+        "#;
+        let parsed = parse_source(source, "test.rs").unwrap();
+        let public = parsed.functions.iter().find(|f| f.name == "public_method").unwrap();
+        let private = parsed.functions.iter().find(|f| f.name == "private_method").unwrap();
+        assert_eq!(public.visibility, Visibility::Public);
+        assert_eq!(private.visibility, Visibility::Private);
     }
 
     #[test]

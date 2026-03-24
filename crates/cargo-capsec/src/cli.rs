@@ -55,9 +55,20 @@ pub struct AuditArgs {
     #[arg(short, long, default_value = "text", value_parser = ["text", "json", "sarif"])]
     pub format: String,
 
-    /// Also scan dependency source code from cargo cache
+    /// Also scan dependency source code from cargo cache.
+    /// With cross-crate propagation, findings from dependencies are
+    /// transitively attributed to workspace functions that call them.
     #[arg(long)]
     pub include_deps: bool,
+
+    /// Only scan dependencies, skip workspace crates (supply-chain view)
+    #[arg(long, conflicts_with = "include_deps")]
+    pub deps_only: bool,
+
+    /// Maximum dependency depth to scan (0 = unlimited, default: 1 = direct deps only).
+    /// Only meaningful with --include-deps or --deps-only.
+    #[arg(long, default_value_t = 1)]
+    pub dep_depth: usize,
 
     /// Minimum risk level to report
     #[arg(long, default_value = "low", value_parser = ["low", "medium", "high", "critical"])]

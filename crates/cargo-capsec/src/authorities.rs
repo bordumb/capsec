@@ -8,7 +8,7 @@
 //! The registry is compiled into the binary via [`build_registry`]. Users can extend it
 //! at runtime with custom patterns loaded from `.capsec.toml` (see [`CustomAuthority`]).
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// The kind of ambient authority a call exercises.
 ///
@@ -24,7 +24,7 @@ use serde::Serialize;
 /// | `Env` | Environment variable access | Yellow |
 /// | `Process` | Subprocess spawning (`Command::new`) | Magenta |
 /// | `Ffi` | Foreign function interface (`extern` blocks) | Cyan |
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum Category {
     /// Filesystem access: reads, writes, deletes, directory operations.
@@ -65,7 +65,7 @@ impl Category {
 /// | `Medium` | Can read data or create resources | `fs::read`, `env::var`, `File::open` |
 /// | `High` | Can write, delete, or open network connections | `fs::write`, `TcpStream::connect` |
 /// | `Critical` | Can destroy data or execute arbitrary code | `remove_dir_all`, `Command::new` |
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 #[non_exhaustive]
 pub enum Risk {
     /// Read-only metadata or low-impact queries.

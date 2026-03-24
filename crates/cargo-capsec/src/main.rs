@@ -2,14 +2,17 @@ mod authorities;
 mod baseline;
 mod cli;
 mod config;
+mod cross_crate;
 mod detector;
 mod discovery;
+mod export_map;
 mod parser;
 mod reporter;
 
 use authorities::Risk;
 use clap::Parser;
 use cli::{AuditArgs, BadgeArgs, CargoSubcommand, CheckDenyArgs, Cli, Commands};
+use std::collections::HashMap;
 use std::path::Path;
 
 fn main() {
@@ -33,6 +36,8 @@ fn run_audit(args: AuditArgs) {
 
     let path_arg = args.path.canonicalize().unwrap_or(args.path.clone());
 
+    let scan_deps = args.include_deps || args.deps_only;
+
     // Load config
     let cfg = match config::load_config(&path_arg, &fs_read) {
         Ok(c) => c,
@@ -42,9 +47,9 @@ fn run_audit(args: AuditArgs) {
         }
     };
 
-    // Discover crates
+    // Discover crates — always include deps when cross-crate scanning is active
     let discovery =
-        match discovery::discover_crates(&path_arg, args.include_deps, &spawn_cap, &fs_read) {
+        match discovery::discover_crates(&path_arg, scan_deps, &spawn_cap, &fs_read) {
             Ok(d) => d,
             Err(e) => {
                 eprintln!("Error: {e}");
@@ -53,51 +58,288 @@ fn run_audit(args: AuditArgs) {
             }
         };
     let workspace_root = discovery.workspace_root;
-    let crates = discovery.crates;
+    let resolve_graph = discovery.resolve_graph;
+    let all_crates = discovery.crates;
 
-    // Filter crates
-    let crates: Vec<_> = crates
-        .into_iter()
-        .filter(|c| {
-            if !args.include_deps && c.is_dependency {
-                return false;
+    // Separate workspace crates from dependencies
+    let (workspace_crates, dep_crates): (Vec<_>, Vec<_>) =
+        all_crates.into_iter().partition(|c| !c.is_dependency);
+
+    let crate_deny = cfg.deny.normalized_categories();
+    let customs = config::custom_authorities(&cfg);
+
+    let mut all_findings = Vec::new();
+
+    if scan_deps {
+        // ── Cross-crate two-phase scan ──
+
+        // Phase 1: Scan dependency crates, build export maps.
+        // Check cache first; only scan if cache miss.
+        // At depth=1, all deps are independent and can be scanned in parallel.
+        let cache_dir = workspace_root.join(".capsec-cache");
+
+        let scan_one_dep = |krate: &discovery::CrateInfo| -> (export_map::CrateExportMap, Vec<detector::Finding>) {
+            let normalized_name = discovery::normalize_crate_name(&krate.name);
+
+            // Try loading from cache (only for registry deps)
+            if krate.is_dependency {
+                if let Some(cached) = export_map::load_cached_export_map(
+                    &cache_dir,
+                    &normalized_name,
+                    &krate.version,
+                    &fs_read,
+                ) {
+                    return (cached, Vec::new());
+                }
             }
+
+            let mut det = detector::Detector::new();
+            det.add_custom_authorities(&customs);
+
+            let source_files = discovery::discover_source_files(&krate.source_dir, &fs_read);
+            let mut dep_findings = Vec::new();
+
+            for file_path in source_files {
+                match parser::parse_file(&file_path, &fs_read) {
+                    Ok(parsed) => {
+                        let findings =
+                            det.analyse(&parsed, &krate.name, &krate.version, &crate_deny);
+                        dep_findings.extend(findings);
+                    }
+                    Err(_e) => {
+                        // Silently skip unparseable files in deps
+                    }
+                }
+            }
+
+            let emap = export_map::build_export_map(
+                &normalized_name,
+                &krate.version,
+                &dep_findings,
+                &krate.source_dir,
+            );
+
+            // Cache for registry deps
+            if krate.is_dependency {
+                export_map::save_export_map_cache(&cache_dir, &emap, &fs_write);
+            }
+
+            (emap, dep_findings)
+        };
+
+        // Scan deps — parallel at depth=1, sequential at depth>1 (needs prior maps)
+        let mut export_maps = Vec::new();
+
+        if args.dep_depth == 1 {
+            // All deps are independent at depth 1 — scan sequentially
+            // (capsec capabilities are !Send, so rayon can't parallelize I/O;
+            //  parallelism will be added when capabilities support Sync)
+            let results: Vec<_> = dep_crates.iter().map(|k| scan_one_dep(k)).collect();
+
+            for (emap, dep_findings) in results {
+                export_maps.push(emap);
+                if args.deps_only {
+                    all_findings.extend(dep_findings);
+                }
+            }
+        } else {
+            // Multi-hop: sequential, injecting prior maps at each step
+            for krate in &dep_crates {
+                let normalized_name = discovery::normalize_crate_name(&krate.name);
+
+                // Try cache
+                if krate.is_dependency {
+                    if let Some(cached) = export_map::load_cached_export_map(
+                        &cache_dir,
+                        &normalized_name,
+                        &krate.version,
+                        &fs_read,
+                    ) {
+                        export_maps.push(cached);
+                        continue;
+                    }
+                }
+
+                let mut det = detector::Detector::new();
+                det.add_custom_authorities(&customs);
+
+                // Inject previously-scanned deps' export maps for multi-hop chains
+                let cross_crate_customs =
+                    cross_crate::export_map_to_custom_authorities(&export_maps);
+                det.add_custom_authorities(&cross_crate_customs);
+
+                let source_files = discovery::discover_source_files(&krate.source_dir, &fs_read);
+                let mut dep_findings = Vec::new();
+
+                for file_path in source_files {
+                    match parser::parse_file(&file_path, &fs_read) {
+                        Ok(parsed) => {
+                            let findings =
+                                det.analyse(&parsed, &krate.name, &krate.version, &crate_deny);
+                            dep_findings.extend(findings);
+                        }
+                        Err(e) => {
+                            eprintln!("  Warning: {e}");
+                        }
+                    }
+                }
+
+                let emap = export_map::build_export_map(
+                    &normalized_name,
+                    &krate.version,
+                    &dep_findings,
+                    &krate.source_dir,
+                );
+
+                if krate.is_dependency {
+                    export_map::save_export_map_cache(&cache_dir, &emap, &fs_write);
+                }
+
+                export_maps.push(emap);
+
+                if args.deps_only {
+                    all_findings.extend(dep_findings);
+                }
+            }
+        }
+
+        // Phase 2: Scan workspace crates with dependency export maps injected.
+        // Process in topological order so workspace-to-workspace findings propagate
+        // (e.g., radicle-cli depends on radicle → radicle scanned first).
+        if !args.deps_only {
+            let dep_customs =
+                cross_crate::export_map_to_custom_authorities(&export_maps);
+
+            // Determine scan order: topological if resolve graph available
+            let ordered_ws_crates: Vec<&discovery::CrateInfo> =
+                if let Some(ref graph) = resolve_graph {
+                    if let Some(topo_ids) =
+                        discovery::workspace_topological_order(&workspace_crates, graph)
+                    {
+                        let id_to_idx: HashMap<&str, usize> = workspace_crates
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(i, c)| c.package_id.as_deref().map(|id| (id, i)))
+                            .collect();
+                        let mut ordered: Vec<&discovery::CrateInfo> = Vec::new();
+                        for id in &topo_ids {
+                            if let Some(&idx) = id_to_idx.get(id.as_str()) {
+                                ordered.push(&workspace_crates[idx]);
+                            }
+                        }
+                        // Add any not in topo order (defensive fallback)
+                        let seen: std::collections::HashSet<&str> =
+                            topo_ids.iter().map(|s| s.as_str()).collect();
+                        for c in &workspace_crates {
+                            if c.package_id
+                                .as_ref()
+                                .map_or(true, |id| !seen.contains(id.as_str()))
+                            {
+                                ordered.push(c);
+                            }
+                        }
+                        ordered
+                    } else {
+                        workspace_crates.iter().collect()
+                    }
+                } else {
+                    workspace_crates.iter().collect()
+                };
+
+            let mut workspace_export_maps: Vec<export_map::CrateExportMap> = Vec::new();
+
+            for krate in &ordered_ws_crates {
+                // Apply --only / --skip filtering to workspace crates
+                if let Some(ref only) = args.only {
+                    let allowed: Vec<&str> = only.split(',').collect();
+                    if !allowed.contains(&krate.name.as_str()) {
+                        continue;
+                    }
+                }
+                if let Some(ref skip) = args.skip {
+                    let skipped: Vec<&str> = skip.split(',').collect();
+                    if skipped.contains(&krate.name.as_str()) {
+                        continue;
+                    }
+                }
+
+                let mut det = detector::Detector::new();
+                det.add_custom_authorities(&customs);
+                det.add_custom_authorities(&dep_customs);
+
+                // Inject previously-scanned workspace member export maps
+                let ws_customs =
+                    cross_crate::export_map_to_custom_authorities(&workspace_export_maps);
+                det.add_custom_authorities(&ws_customs);
+
+                let source_files = discovery::discover_source_files(&krate.source_dir, &fs_read);
+                let mut ws_crate_findings = Vec::new();
+
+                for file_path in source_files {
+                    if config::should_exclude(&file_path, &cfg.analysis.exclude) {
+                        continue;
+                    }
+
+                    match parser::parse_file(&file_path, &fs_read) {
+                        Ok(parsed) => {
+                            let findings =
+                                det.analyse(&parsed, &krate.name, &krate.version, &crate_deny);
+                            ws_crate_findings.extend(findings);
+                        }
+                        Err(e) => {
+                            eprintln!("  Warning: {e}");
+                        }
+                    }
+                }
+
+                // Build export map for this workspace crate (for downstream ws crates)
+                let normalized_name = discovery::normalize_crate_name(&krate.name);
+                let ws_emap = export_map::build_export_map(
+                    &normalized_name,
+                    &krate.version,
+                    &ws_crate_findings,
+                    &krate.source_dir,
+                );
+                workspace_export_maps.push(ws_emap);
+
+                all_findings.extend(ws_crate_findings);
+            }
+        }
+    } else {
+        // ── Original single-pass scan (no deps) ──
+        for krate in &workspace_crates {
             if let Some(ref only) = args.only {
                 let allowed: Vec<&str> = only.split(',').collect();
-                return allowed.contains(&c.name.as_str());
+                if !allowed.contains(&krate.name.as_str()) {
+                    continue;
+                }
             }
             if let Some(ref skip) = args.skip {
                 let skipped: Vec<&str> = skip.split(',').collect();
-                return !skipped.contains(&c.name.as_str());
-            }
-            true
-        })
-        .collect();
-
-    // Set up detector with custom authorities
-    let mut det = detector::Detector::new();
-    let customs = config::custom_authorities(&cfg);
-    det.add_custom_authorities(&customs);
-    let crate_deny = cfg.deny.normalized_categories();
-
-    // Parse and detect
-    let mut all_findings = Vec::new();
-
-    for krate in &crates {
-        let source_files = discovery::discover_source_files(&krate.source_dir, &fs_read);
-
-        for file_path in source_files {
-            if config::should_exclude(&file_path, &cfg.analysis.exclude) {
-                continue;
-            }
-
-            match parser::parse_file(&file_path, &fs_read) {
-                Ok(parsed) => {
-                    let findings = det.analyse(&parsed, &krate.name, &krate.version, &crate_deny);
-                    all_findings.extend(findings);
+                if skipped.contains(&krate.name.as_str()) {
+                    continue;
                 }
-                Err(e) => {
-                    eprintln!("  Warning: {e}");
+            }
+
+            let mut det = detector::Detector::new();
+            det.add_custom_authorities(&customs);
+
+            let source_files = discovery::discover_source_files(&krate.source_dir, &fs_read);
+
+            for file_path in source_files {
+                if config::should_exclude(&file_path, &cfg.analysis.exclude) {
+                    continue;
+                }
+
+                match parser::parse_file(&file_path, &fs_read) {
+                    Ok(parsed) => {
+                        let findings =
+                            det.analyse(&parsed, &krate.name, &krate.version, &crate_deny);
+                        all_findings.extend(findings);
+                    }
+                    Err(e) => {
+                        eprintln!("  Warning: {e}");
+                    }
                 }
             }
         }
@@ -108,15 +350,22 @@ fn run_audit(args: AuditArgs) {
         f.file = make_relative(&f.file, &workspace_root);
     }
 
-    // Filter by risk level
+    // Filter by risk level (applied after all propagation)
     let min_risk = Risk::parse(&args.min_risk);
     all_findings.retain(|f| f.risk >= min_risk);
 
     // Apply allow rules
     all_findings.retain(|f| !config::should_allow(f, &cfg));
 
+    // Use the appropriate crate list for classification
+    let crates_for_classification = if args.deps_only {
+        &dep_crates
+    } else {
+        &workspace_crates
+    };
+
     // Classification verification
-    let classification_results: Vec<config::ClassificationResult> = crates
+    let classification_results: Vec<config::ClassificationResult> = crates_for_classification
         .iter()
         .map(|krate| {
             let resolved = config::resolve_classification(&krate.name, krate.classification, &cfg);

@@ -45,14 +45,27 @@ cargo install --path crates/cargo-capsec
 ### Run
 
 ```bash
+# Scan workspace crates only (fast, default)
 cargo capsec audit
+
+# Scan workspace + dependencies — cross-crate propagation shows
+# which of YOUR functions inherit authority from dependencies
+cargo capsec audit --include-deps
+
+# Control dependency depth (default: 1 = direct deps only)
+cargo capsec audit --include-deps --dep-depth 3   # up to 3 hops
+cargo capsec audit --include-deps --dep-depth 0   # unlimited
+
+# Supply-chain view — only dependency findings
+cargo capsec audit --deps-only
 ```
 
 ```
 my-app v0.1.0
 ─────────────
   FS    src/config.rs:8:5     fs::read_to_string     load_config()
-  NET   src/api.rs:15:9       TcpStream::connect     fetch_data()
+  NET   src/api.rs:15:9       reqwest::get            fetch_data()
+        ↳ Cross-crate: reqwest::get() → TcpStream::connect [NET]
   PROC  src/deploy.rs:42:17   Command::new           run_migration()
 
 Summary

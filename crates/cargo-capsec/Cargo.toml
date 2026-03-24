@@ -12,6 +12,10 @@ categories = ["development-tools", "command-line-utilities"]
 name = "cargo-capsec"
 path = "src/main.rs"
 
+[features]
+default = ["parallel"]
+parallel = ["dep:rayon"]
+
 [dependencies]
 clap.workspace = true
 syn.workspace = true
@@ -22,6 +26,7 @@ serde.workspace = true
 serde_json.workspace = true
 toml.workspace = true
 colored.workspace = true
+rayon = { workspace = true, optional = true }
 capsec-core.workspace = true
 capsec-std.workspace = true
 
