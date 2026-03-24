@@ -579,3 +579,86 @@ fn workspace_to_workspace_propagation() {
         "app::init should get ws-to-ws FS finding from core_lib::read_config"
     );
 }
+
+#[test]
+fn mir_findings_feed_into_cross_crate_propagation() {
+    // Simulates the unified chain: MIR finds FFI in a dep, that finding becomes
+    // an export map entry, and workspace code calling the dep gets a cross-crate finding.
+    //
+    // This is the flow:
+    //   1. MIR driver scans "ffi_dep" → finds open_db() calls sqlite3_open (FFI)
+    //   2. That finding is built into an export map for ffi_dep
+    //   3. Workspace "app" calls ffi_dep::open_db()
+    //   4. The export map entry matches → app::init gets a cross-crate FFI finding
+
+    // Step 1: Simulate MIR findings from a dependency (as if read from JSONL)
+    let mir_finding = cargo_capsec::detector::Finding {
+        file: "src/lib.rs".to_string(),
+        function: "open_db".to_string(),
+        function_line: 5,
+        call_line: 6,
+        call_col: 5,
+        call_text: "sqlite3_open".to_string(),
+        category: Category::Ffi,
+        subcategory: "ffi_call".to_string(),
+        risk: cargo_capsec::authorities::Risk::High,
+        description: "Calls FFI function sqlite3_open()".to_string(),
+        is_build_script: false,
+        crate_name: "ffi_dep".to_string(),
+        crate_version: "1.0.0".to_string(),
+        is_deny_violation: false,
+        is_transitive: false,
+    };
+
+    // Step 2: Build export map from the MIR finding (same as main.rs does)
+    let mir_export_map = build_export_map(
+        "ffi_dep",
+        "1.0.0",
+        &[mir_finding],
+        Path::new("src"),
+    );
+    assert!(
+        !mir_export_map.exports.is_empty(),
+        "MIR finding should produce an export map entry"
+    );
+
+    // Step 3: Convert to custom authorities and inject into detector
+    let customs = export_map_to_custom_authorities(&[mir_export_map]);
+    assert!(
+        !customs.is_empty(),
+        "Export map should produce custom authorities"
+    );
+
+    let mut det = Detector::new();
+    det.add_custom_authorities(&customs);
+
+    // Step 4: Scan workspace code that calls ffi_dep::open_db()
+    let app_source = r#"
+        pub fn init() -> i32 {
+            ffi_dep::open_db()
+        }
+    "#;
+    let app_parsed = parse_source(app_source, "src/lib.rs").unwrap();
+    let app_findings = det.analyse(&app_parsed, "app", "0.1.0", &[]);
+
+    // The unified chain: app::init → ffi_dep::open_db → sqlite3_open (FFI)
+    let init_findings: Vec<_> = app_findings
+        .iter()
+        .filter(|f| f.function == "init")
+        .collect();
+    assert!(
+        !init_findings.is_empty(),
+        "app::init should get cross-crate FFI finding from MIR-discovered ffi_dep::open_db. \
+         This proves MIR findings feed into the export map system and propagate transitively. \
+         Got: {app_findings:?}"
+    );
+    assert!(
+        init_findings[0].description.contains("Cross-crate"),
+        "Finding should be marked as cross-crate"
+    );
+    assert_eq!(
+        init_findings[0].category,
+        Category::Ffi,
+        "Finding should carry the FFI category from the MIR-discovered dep"
+    );
+}
