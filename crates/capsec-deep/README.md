@@ -27,16 +27,22 @@ Findings are written as JSONL to a temp file, which the main `cargo-capsec` CLI 
 
 ## Architecture
 
-```
-cargo capsec audit --deep
-  └→ cargo check (with RUSTC_WRAPPER=capsec-driver)
-       └→ capsec-driver replaces rustc for each crate
-            └→ after_analysis callback:
-                 1. Walk MIR BasicBlocks → TerminatorKind::Call
-                 2. Extract callee DefId → tcx.def_path_str()
-                 3. Classify against authority patterns
-                 4. Check tcx.is_foreign_item() for FFI
-                 5. Write JSONL to $CAPSEC_DEEP_OUTPUT
+```mermaid
+flowchart TD
+    A["cargo capsec audit --deep"] --> B["cargo check\n(RUSTC_WRAPPER=capsec-driver)"]
+    B --> C["capsec-driver replaces rustc\nfor each crate"]
+    C --> D["after_analysis callback"]
+    D --> E["Walk MIR BasicBlocks\nTerminatorKind::Call"]
+    E --> F["Extract callee DefId\ntcx.def_path_str()"]
+    F --> G{Classify call}
+    G -->|"std::fs, std::net,\nstd::env, std::process"| H["Authority finding\n(FS/NET/ENV/PROC)"]
+    G -->|"tcx.is_foreign_item()"| I["FFI finding"]
+    G -->|"No match"| J["Skip"]
+    H --> K["Write JSONL to\n$CAPSEC_DEEP_OUTPUT"]
+    I --> K
+    K --> L["cargo-capsec reads JSONL\nbuilds export maps"]
+    L --> M["Phase 2: workspace scan\nwith MIR export maps injected"]
+    M --> N["Unified cross-crate\ntransitive findings"]
 ```
 
 ## Standalone testing
