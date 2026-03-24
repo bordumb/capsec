@@ -346,17 +346,23 @@ impl rustc_driver::Callbacks for CapsecCallbacks {
             eprintln!("[capsec-deep] Found {} findings in {crate_name}", findings.len());
         }
 
-        // Write findings as JSONL
+        // Write findings as JSONL — buffer all lines and write in a single batch
+        // to avoid interleaving when cargo compiles multiple crates in parallel.
         if let Ok(output_path) = std::env::var("CAPSEC_DEEP_OUTPUT") {
-            if let Ok(mut file) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&output_path)
-            {
-                for finding in &findings {
-                    if let Ok(json) = serde_json::to_string(finding) {
-                        let _ = writeln!(file, "{json}");
-                    }
+            let mut batch = String::new();
+            for finding in &findings {
+                if let Ok(json) = serde_json::to_string(finding) {
+                    batch.push_str(&json);
+                    batch.push('\n');
+                }
+            }
+            if !batch.is_empty() {
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&output_path)
+                {
+                    let _ = file.write_all(batch.as_bytes());
                 }
             }
         } else if debug {

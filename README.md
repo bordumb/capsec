@@ -37,6 +37,9 @@ Scans Rust source for ambient authority (filesystem, network, env, process, FFI)
 
 ```bash
 cargo install cargo-capsec
+
+# Or install from source
+cargo install --path crates/cargo-capsec
 ```
 
 ### Adopt in 30 seconds

@@ -97,22 +97,24 @@ pub fn run_compare(opts: CompareOptions) {
     let fs_read = cap_root.grant::<capsec_core::permission::FsRead>();
     let spawn_cap = cap_root.grant::<capsec_core::permission::Spawn>();
 
-    let left = parse_crate_spec_or_latest(&opts.left);
-    let right = parse_crate_spec_or_latest(&opts.right);
+    let mut left = parse_crate_spec_or_latest(&opts.left);
+    let mut right = parse_crate_spec_or_latest(&opts.right);
 
-    eprintln!("Fetching {} v{}...", left.name, left.version);
+    eprintln!("Fetching {}...", left.name);
     let left_dir = fetch_crate_source(&left.name, &left.version, &spawn_cap, &fs_read)
         .unwrap_or_else(|e| {
             eprintln!("Error: {e}");
             std::process::exit(1);
         });
+    resolve_version_from_path(&mut left, &left_dir);
 
-    eprintln!("Fetching {} v{}...", right.name, right.version);
+    eprintln!("Fetching {}...", right.name);
     let right_dir = fetch_crate_source(&right.name, &right.version, &spawn_cap, &fs_read)
         .unwrap_or_else(|e| {
             eprintln!("Error: {e}");
             std::process::exit(1);
         });
+    resolve_version_from_path(&mut right, &right_dir);
 
     eprintln!("Scanning...\n");
     let config = Config::default();
@@ -146,8 +148,13 @@ fn fetch_crate_source(
     let temp_dir = std::env::temp_dir().join(format!("capsec-fetch-{crate_name}-{version}"));
     let _ = std::fs::create_dir_all(&temp_dir);
 
+    let version_spec = if version == "*" {
+        format!("\"{version}\"")
+    } else {
+        format!("\"={version}\"")
+    };
     let cargo_toml = format!(
-        "[package]\nname = \"capsec-fetch-temp\"\nversion = \"0.0.1\"\nedition = \"2021\"\n\n[dependencies]\n{crate_name} = \"={version}\"\n"
+        "[package]\nname = \"capsec-fetch-temp\"\nversion = \"0.0.1\"\nedition = \"2021\"\n\n[dependencies]\n{crate_name} = {version_spec}\n"
     );
     std::fs::write(temp_dir.join("Cargo.toml"), cargo_toml)
         .map_err(|e| format!("Failed to write temp Cargo.toml: {e}"))?;
@@ -180,6 +187,7 @@ fn fetch_crate_source(
 }
 
 /// Looks for a crate's source in ~/.cargo/registry/src/.
+/// When version is "*", finds the latest version available in the cache.
 fn find_registry_source(crate_name: &str, version: &str) -> Option<PathBuf> {
     let home = std::env::var("CARGO_HOME").unwrap_or_else(|_| {
         std::env::var("HOME")
@@ -192,17 +200,38 @@ fn find_registry_source(crate_name: &str, version: &str) -> Option<PathBuf> {
         return None;
     }
 
-    // Iterate index directories (index.crates.io-HASH/)
     let entries = std::fs::read_dir(&registry_src).ok()?;
-    for entry in entries.flatten() {
-        let crate_dir = entry.path().join(format!("{crate_name}-{version}"));
-        if crate_dir.exists() {
-            // Some crates have src/ subdir, some don't
-            let src_dir = crate_dir.join("src");
-            if src_dir.exists() {
-                return Some(src_dir);
+    for index_dir in entries.flatten() {
+        if version == "*" {
+            // Find any version of this crate — pick the latest by name sort
+            let prefix = format!("{crate_name}-");
+            if let Ok(crate_dirs) = std::fs::read_dir(index_dir.path()) {
+                let mut matches: Vec<_> = crate_dirs
+                    .flatten()
+                    .filter(|e| {
+                        e.file_name()
+                            .to_str()
+                            .is_some_and(|n| n.starts_with(&prefix))
+                    })
+                    .collect();
+                matches.sort_by_key(|b| std::cmp::Reverse(b.file_name()));
+                if let Some(best) = matches.first() {
+                    let src_dir = best.path().join("src");
+                    if src_dir.exists() {
+                        return Some(src_dir);
+                    }
+                    return Some(best.path());
+                }
             }
-            return Some(crate_dir);
+        } else {
+            let crate_dir = index_dir.path().join(format!("{crate_name}-{version}"));
+            if crate_dir.exists() {
+                let src_dir = crate_dir.join("src");
+                if src_dir.exists() {
+                    return Some(src_dir);
+                }
+                return Some(crate_dir);
+            }
         }
     }
 
@@ -249,6 +278,29 @@ fn diff_findings(old: &[Finding], new: &[Finding]) -> DiffResult {
 }
 
 // ── Parsers ──
+
+/// If version is "*", resolves it from the fetched directory path.
+/// e.g., path `.cargo/registry/src/.../ureq-2.12.1/src` → version "2.12.1"
+fn resolve_version_from_path(spec: &mut CrateSpec, dir: &Path) {
+    if spec.version != "*" {
+        return;
+    }
+    // Walk up from src/ to the crate dir: ureq-2.12.1
+    let crate_dir = if dir.ends_with("src") {
+        dir.parent()
+    } else {
+        Some(dir)
+    };
+    if let Some(dir_name) = crate_dir
+        .and_then(|d| d.file_name())
+        .and_then(|n| n.to_str())
+    {
+        let prefix = format!("{}-", spec.name);
+        if let Some(ver) = dir_name.strip_prefix(&prefix) {
+            spec.version = ver.to_string();
+        }
+    }
+}
 
 /// Parses "serde_json@1.0.133" into CrateSpec.
 fn parse_crate_spec(spec: &str) -> Result<CrateSpec, String> {
