@@ -361,13 +361,22 @@ pub fn discover_crates(
             .unwrap_or(Path::new("."))
             .to_path_buf();
 
+        // Check for source in src/ (standard) or at crate root (common for -sys crates
+        // like libgit2-sys which have lib.rs at the root, not in src/)
         let src_dir = manifest_dir.join("src");
+        let source_dir = if src_dir.exists() {
+            Some(src_dir)
+        } else if manifest_dir.join("lib.rs").exists() || manifest_dir.join("main.rs").exists() {
+            Some(manifest_dir.clone())
+        } else {
+            None
+        };
 
-        if src_dir.exists() {
+        if let Some(source_dir) = source_dir {
             crates.push(CrateInfo {
                 name: package.name.clone(),
                 version: package.version.clone(),
-                source_dir: src_dir,
+                source_dir,
                 is_dependency: package.source.is_some(),
                 classification: extract_classification(&package.metadata),
                 package_id: if include_deps {

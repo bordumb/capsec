@@ -12,6 +12,8 @@
 
 #![feature(rustc_private)]
 
+mod libc_table;
+
 extern crate rustc_driver;
 extern crate rustc_hir;
 extern crate rustc_interface;
@@ -204,9 +206,10 @@ impl rustc_driver::Callbacks for CapsecCallbacks {
         let crate_name = tcx.crate_name(LOCAL_CRATE).to_string();
         let crate_version = std::env::var("CAPSEC_CRATE_VERSION").unwrap_or_else(|_| "0.0.0".to_string());
         let debug = std::env::var("CAPSEC_DEEP_DEBUG").is_ok();
+        let progress = std::env::var("CAPSEC_DEEP_PROGRESS").is_ok();
 
-        if debug {
-            eprintln!("[capsec-deep] Analyzing crate: {crate_name}");
+        if debug || progress {
+            eprintln!("  [capsec-deep] analyzing: {crate_name}");
         }
 
         // Skip std/core/alloc — not useful for authority analysis
@@ -320,6 +323,47 @@ impl rustc_driver::Callbacks for CapsecCallbacks {
 
                     // Check 2: FFI — calls to foreign functions
                     if tcx.is_foreign_item(callee_def_id) {
+                        // Classify libc calls into FS/NET/ENV/PROC via POSIX table
+                        let callee_crate_name =
+                            tcx.crate_name(callee_def_id.krate).to_string();
+                        let callee_fn_name = callee_path
+                            .rsplit("::")
+                            .next()
+                            .unwrap_or(&callee_path);
+
+                        let (cat, subcat, risk, desc) =
+                            if callee_crate_name == "libc" {
+                                if let Some(lc) =
+                                    libc_table::classify_libc_fn(callee_fn_name)
+                                {
+                                    (
+                                        lc.category.to_string(),
+                                        lc.subcategory.to_string(),
+                                        lc.risk.to_string(),
+                                        format!(
+                                            "libc::{callee_fn_name}() — {}",
+                                            lc.subcategory
+                                        ),
+                                    )
+                                } else {
+                                    (
+                                        "Ffi".to_string(),
+                                        "ffi_call".to_string(),
+                                        "High".to_string(),
+                                        format!(
+                                            "Calls FFI function {callee_path}()"
+                                        ),
+                                    )
+                                }
+                            } else {
+                                (
+                                    "Ffi".to_string(),
+                                    "ffi_call".to_string(),
+                                    "High".to_string(),
+                                    format!("Calls FFI function {callee_path}()"),
+                                )
+                            };
+
                         findings.push(DeepFinding {
                             file: fn_file.clone(),
                             function: fn_name.clone(),
@@ -327,10 +371,10 @@ impl rustc_driver::Callbacks for CapsecCallbacks {
                             call_line,
                             call_col,
                             call_text: callee_path.clone(),
-                            category: "Ffi".to_string(),
-                            subcategory: "ffi_call".to_string(),
-                            risk: "High".to_string(),
-                            description: format!("Calls FFI function {callee_path}()"),
+                            category: cat,
+                            subcategory: subcat,
+                            risk,
+                            description: desc,
                             is_build_script,
                             crate_name: crate_name.clone(),
                             crate_version: crate_version.clone(),

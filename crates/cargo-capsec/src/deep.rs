@@ -8,6 +8,7 @@ use crate::discovery::{self, CrateInfo};
 use crate::export_map::{self, CrateExportMap};
 use std::collections::HashMap;
 use std::path::Path;
+use std::time::Instant;
 
 /// Pinned nightly date for capsec-driver. Must match `crates/capsec-deep/rust-toolchain.toml`.
 const PINNED_NIGHTLY: &str = "nightly-2026-02-17";
@@ -37,6 +38,7 @@ pub fn run_deep_analysis(
     fs_read: &impl capsec_core::cap_provider::CapProvider<capsec_core::permission::FsRead>,
     spawn_cap: &impl capsec_core::cap_provider::CapProvider<capsec_core::permission::Spawn>,
 ) -> DeepResult {
+    let start = Instant::now();
     let mut warnings: Vec<String> = Vec::new();
     let output_path =
         std::env::temp_dir().join(format!("capsec-deep-{}.jsonl", std::process::id()));
@@ -75,6 +77,14 @@ pub fn run_deep_analysis(
                 .env("CAPSEC_CRATE_VERSION", "0.0.0")
                 .env("CARGO_TARGET_DIR", &deep_target_dir)
                 .env("RUSTUP_TOOLCHAIN", toolchain)
+                .env(
+                    "CAPSEC_DEEP_PROGRESS",
+                    if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
+                        "1"
+                    } else {
+                        ""
+                    },
+                )
                 .output()
                 .ok()
         });
@@ -122,6 +132,9 @@ pub fn run_deep_analysis(
 
     // Build export maps from MIR findings
     let export_maps = build_mir_export_maps(&mir_findings, workspace_crates, dep_crates);
+
+    let elapsed = start.elapsed();
+    eprintln!("  Deep analysis took {:.1}s", elapsed.as_secs_f64());
 
     DeepResult {
         findings: mir_findings,

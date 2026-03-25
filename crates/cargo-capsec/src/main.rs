@@ -160,7 +160,15 @@ fn run_audit(args: AuditArgs) {
         // Scan deps — parallel at depth=1, sequential at depth>1 (needs prior maps)
         let mut export_maps = Vec::new();
 
-        if args.dep_depth == 1 {
+        // --deep implies full transitive closure
+        let effective_dep_depth = if args.deep && args.dep_depth == 1 {
+            eprintln!("Note: --deep implies full dependency analysis (--dep-depth 0)");
+            0
+        } else {
+            args.dep_depth
+        };
+
+        if effective_dep_depth == 1 {
             // All deps are independent at depth 1 — scan sequentially
             // (capsec capabilities are !Send, so rayon can't parallelize I/O;
             //  parallelism will be added when capabilities support Sync)
@@ -173,8 +181,59 @@ fn run_audit(args: AuditArgs) {
                 }
             }
         } else {
-            // Multi-hop: sequential, injecting prior maps at each step
-            for krate in &dep_crates {
+            // Multi-hop: sequential, injecting prior maps at each step.
+            // Topologically sort deps so leaves (e.g., libgit2-sys) are scanned before
+            // their dependents (e.g., git2). Without this, the scan order is arbitrary
+            // and cross-dep chains break if a dependent is scanned before its dependency.
+            let ordered_dep_crates: Vec<&discovery::CrateInfo> =
+                if let Some(ref graph) = resolve_graph {
+                    let dep_pkg_ids: std::collections::HashSet<String> = dep_crates
+                        .iter()
+                        .filter_map(|c| c.package_id.clone())
+                        .collect();
+                    let dep_graph: Vec<(String, Vec<discovery::DepEdge>)> = graph
+                        .iter()
+                        .filter(|(id, _)| dep_pkg_ids.contains(id))
+                        .map(|(id, deps)| {
+                            let filtered = deps
+                                .iter()
+                                .filter(|d| dep_pkg_ids.contains(&d.pkg_id))
+                                .cloned()
+                                .collect();
+                            (id.clone(), filtered)
+                        })
+                        .collect();
+                    if let Ok(topo_ids) = discovery::topological_order(&dep_graph) {
+                        let id_to_idx: HashMap<&str, usize> = dep_crates
+                            .iter()
+                            .enumerate()
+                            .filter_map(|(i, c)| c.package_id.as_deref().map(|id| (id, i)))
+                            .collect();
+                        let mut ordered: Vec<&discovery::CrateInfo> = Vec::new();
+                        for id in &topo_ids {
+                            if let Some(&idx) = id_to_idx.get(id.as_str()) {
+                                ordered.push(&dep_crates[idx]);
+                            }
+                        }
+                        let seen: std::collections::HashSet<&str> =
+                            topo_ids.iter().map(|s| s.as_str()).collect();
+                        for c in &dep_crates {
+                            if c.package_id
+                                .as_ref()
+                                .is_none_or(|id| !seen.contains(id.as_str()))
+                            {
+                                ordered.push(c);
+                            }
+                        }
+                        ordered
+                    } else {
+                        dep_crates.iter().collect()
+                    }
+                } else {
+                    dep_crates.iter().collect()
+                };
+
+            for krate in &ordered_dep_crates {
                 let normalized_name = discovery::normalize_crate_name(&krate.name);
 
                 // Try cache
