@@ -70,6 +70,7 @@ pub fn run_deep_analysis(
     let deep_result = capsec_std::process::command("cargo", spawn_cap)
         .ok()
         .and_then(|mut cmd| {
+            let is_tty = std::io::IsTerminal::is_terminal(&std::io::stderr());
             cmd.arg("check")
                 .current_dir(path)
                 .env("RUSTC_WRAPPER", "capsec-driver")
@@ -77,16 +78,12 @@ pub fn run_deep_analysis(
                 .env("CAPSEC_CRATE_VERSION", "0.0.0")
                 .env("CARGO_TARGET_DIR", &deep_target_dir)
                 .env("RUSTUP_TOOLCHAIN", toolchain)
-                .env(
-                    "CAPSEC_DEEP_PROGRESS",
-                    if std::io::IsTerminal::is_terminal(&std::io::stderr()) {
-                        "1"
-                    } else {
-                        ""
-                    },
-                )
-                .output()
-                .ok()
+                .env("CAPSEC_DEEP_PROGRESS", if is_tty { "1" } else { "" });
+            // Inherit stderr so progress lines reach the terminal
+            if is_tty {
+                cmd.stderr(std::process::Stdio::inherit());
+            }
+            cmd.output().ok()
         });
 
     // Build name/version lookup for patching MIR findings
